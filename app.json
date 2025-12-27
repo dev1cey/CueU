@@ -1,0 +1,36 @@
+{
+  "expo": {
+    "name": "CueU",
+    "slug": "cueu",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#7C3AED"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.cueu.app",
+      "buildNumber": "1.0.0",
+      "infoPlist": {
+        "UILaunchStoryboardName": "SplashScreen"
+      }
+    },
+    "android": {
+      "package": "com.cueu.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#7C3AED"
+      }
+    },
+    "plugins": [
+      "expo-router"
+    ],
+    "scheme": "cueu",
+    "experiments": {
+      "typedRoutes": true
+    },
+    "newArchEnabled": false
+  }
+}
+
