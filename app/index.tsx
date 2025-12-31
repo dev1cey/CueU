@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -16,16 +16,38 @@ export default function AuthScreen() {
   const [reviewCode, setReviewCode] = useState('');
   const router = useRouter();
 
-  // Google Sign-In configuration
-  // You'll need to add these to your .env file
-  const [request, response, promptAsync] = Google.useAuthRequest({
-    expoClientId: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID,
+  // Google Sign-In configuration (optional - only if credentials are set)
+  const hasGoogleCredentials = !!(
+    process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID ||
+    process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID ||
+    process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID
+  );
+
+  const googleConfig = hasGoogleCredentials ? {
     iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
     androidClientId: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,
     webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
-  });
+  } : undefined;
+
+  const [request, response, promptAsync] = Google.useAuthRequest(
+    googleConfig || {
+      // Dummy config to prevent crash if not configured
+      iosClientId: 'dummy',
+      androidClientId: 'dummy',
+      webClientId: 'dummy',
+    }
+  );
 
   const handleGoogleSignIn = async () => {
+    if (!hasGoogleCredentials) {
+      Alert.alert(
+        'Google Sign-In Not Configured',
+        'Google authentication is not set up yet. Please use the skip button or review mode for testing.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
     try {
       setIsLoading(true);
       const result = await promptAsync();
@@ -59,7 +81,7 @@ export default function AuthScreen() {
       }
     } catch (error) {
       console.error('Google Sign-In Error:', error);
-      Alert.alert('Error', 'Failed to sign in with Google');
+      Alert.alert('Error', 'Failed to sign in with Google. Please try again or use review mode.');
     } finally {
       setIsLoading(false);
     }
@@ -83,7 +105,11 @@ export default function AuthScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.keyboardView}
       >
-        <View style={styles.content}>
+        <ScrollView 
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
           {/* Logo and Title */}
           <View style={styles.header}>
             <View style={styles.logoContainer}>
@@ -172,7 +198,7 @@ export default function AuthScreen() {
           >
             <Text style={styles.skipButtonText}>Skip Login (Testing Only)</Text>
           </TouchableOpacity>
-        </View>
+        </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -186,10 +212,11 @@ const styles = StyleSheet.create({
   keyboardView: {
     flex: 1,
   },
-  content: {
-    flex: 1,
+  scrollContent: {
+    flexGrow: 1,
     justifyContent: 'center',
     padding: 24,
+    paddingBottom: 40,
   },
   header: {
     alignItems: 'center',

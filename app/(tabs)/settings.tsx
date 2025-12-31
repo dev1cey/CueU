@@ -3,6 +3,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useState } from 'react';
 import { useRouter } from 'expo-router';
+import { logout } from '../../lib/firebase';
 
 export default function SettingsTab() {
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
@@ -18,7 +19,16 @@ export default function SettingsTab() {
         { 
           text: 'Logout', 
           style: 'destructive',
-          onPress: () => router.replace('/'),
+          onPress: async () => {
+            try {
+              // Logout from Firebase
+              await logout();
+            } catch (error) {
+              console.error('Logout error:', error);
+            }
+            // Navigate to login screen and clear navigation stack
+            router.replace('/' as any);
+          },
         },
       ]
     );
