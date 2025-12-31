@@ -21,6 +21,22 @@ export interface Player {
   losses: number;
   winRate: number;
   gamesPlayed: number;
+  weeklyScores?: { [key: string]: number }; // { 'week1': 10, 'week2': 8, ... }
+  createdAt?: any;
+  updatedAt?: any;
+}
+
+export interface Match {
+  id: string;
+  week: number;
+  player1Id: string;
+  player1Name: string;
+  player1Score: number;
+  player2Id: string;
+  player2Name: string;
+  player2Score: number;
+  date: string;
+  completed: boolean;
   createdAt?: any;
   updatedAt?: any;
 }
@@ -194,5 +210,143 @@ export const createTestPlayers = async () => {
   });
   
   return createdPlayers;
+};
+
+// ==================== ADMIN FUNCTIONS ====================
+
+// Update player skill level (admin only)
+export const updatePlayerSkillLevel = async (playerId: string, skillLevel: number) => {
+  try {
+    if (skillLevel < 1 || skillLevel > 7) {
+      throw new Error('Skill level must be between 1 and 7');
+    }
+    
+    const playerRef = doc(db, 'players', playerId);
+    await updateDoc(playerRef, {
+      skillLevel,
+      updatedAt: Timestamp.now(),
+    });
+  } catch (error: any) {
+    console.error('Error updating skill level:', error);
+    throw new Error(error.message);
+  }
+};
+
+// Update player record manually (admin only)
+export const updatePlayerRecord = async (
+  playerId: string,
+  wins: number,
+  losses: number
+) => {
+  try {
+    const gamesPlayed = wins + losses;
+    const winRate = gamesPlayed > 0 ? Math.round((wins / gamesPlayed) * 100) : 0;
+    
+    const playerRef = doc(db, 'players', playerId);
+    await updateDoc(playerRef, {
+      wins,
+      losses,
+      gamesPlayed,
+      winRate,
+      updatedAt: Timestamp.now(),
+    });
+  } catch (error: any) {
+    console.error('Error updating player record:', error);
+    throw new Error(error.message);
+  }
+};
+
+// Delete a player (admin only)
+export const deletePlayer = async (playerId: string) => {
+  try {
+    const playerRef = doc(db, 'players', playerId);
+    await updateDoc(playerRef, {
+      updatedAt: Timestamp.now(),
+    });
+    // Soft delete - you can implement hard delete if needed
+    // await deleteDoc(playerRef);
+  } catch (error: any) {
+    console.error('Error deleting player:', error);
+    throw new Error(error.message);
+  }
+};
+
+// Create a match result (admin only)
+export const createMatch = async (matchData: Omit<Match, 'id' | 'createdAt' | 'updatedAt'>) => {
+  try {
+    const matchId = `match_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const matchRef = doc(db, 'matches', matchId);
+    
+    await setDoc(matchRef, {
+      ...matchData,
+      createdAt: Timestamp.now(),
+      updatedAt: Timestamp.now(),
+    });
+    
+    // Update player stats if match is completed
+    if (matchData.completed) {
+      await updatePlayersAfterMatch(matchData);
+    }
+    
+    return matchId;
+  } catch (error: any) {
+    console.error('Error creating match:', error);
+    throw new Error(error.message);
+  }
+};
+
+// Helper function to update players after match
+const updatePlayersAfterMatch = async (matchData: Omit<Match, 'id' | 'createdAt' | 'updatedAt'>) => {
+  try {
+    const player1 = await getPlayer(matchData.player1Id);
+    const player2 = await getPlayer(matchData.player2Id);
+    
+    if (!player1 || !player2) {
+      throw new Error('Players not found');
+    }
+    
+    // Determine winner
+    const player1Won = matchData.player1Score > matchData.player2Score;
+    
+    // Update player 1
+    await updatePlayerStats(matchData.player1Id, {
+      wins: player1.wins + (player1Won ? 1 : 0),
+      losses: player1.losses + (player1Won ? 0 : 1),
+    });
+    
+    // Update player 2
+    await updatePlayerStats(matchData.player2Id, {
+      wins: player2.wins + (player1Won ? 0 : 1),
+      losses: player2.losses + (player1Won ? 1 : 0),
+    });
+    
+    // Update league match count
+    const stats = await getLeagueStats();
+    await updateLeagueStats({
+      matches: stats.matches + 1,
+    });
+  } catch (error: any) {
+    console.error('Error updating players after match:', error);
+    throw new Error(error.message);
+  }
+};
+
+// Get all matches
+export const getAllMatches = async (): Promise<Match[]> => {
+  try {
+    const matchesRef = collection(db, 'matches');
+    const q = query(matchesRef, orderBy('week', 'desc'));
+    const querySnapshot = await getDocs(q);
+    
+    const matches: Match[] = [];
+    querySnapshot.forEach((doc) => {
+      matches.push({ id: doc.id, ...doc.data() } as Match);
+    });
+    
+    return matches;
+  } catch (error: any) {
+    console.error('Error getting matches:', error);
+    throw new Error(error.message);
+  }
 };
 

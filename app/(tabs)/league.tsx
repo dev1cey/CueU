@@ -1,13 +1,22 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator, Modal, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useState, useEffect } from 'react';
-import { getAllPlayers, getLeagueStats, createTestPlayers, type Player, type LeagueStats } from '../../lib/leagueData';
+import { 
+  getAllPlayers, 
+  getLeagueStats, 
+  createTestPlayers, 
+  updatePlayerSkillLevel,
+  updatePlayerRecord,
+  type Player, 
+  type LeagueStats 
+} from '../../lib/leagueData';
 
 export default function LeagueTab() {
   const [isEnrolled, setIsEnrolled] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [isAdminMode, setIsAdminMode] = useState(false);
   const [leagueStats, setLeagueStats] = useState<LeagueStats>({
     players: 0,
     currentWeek: 1,
@@ -15,6 +24,13 @@ export default function LeagueTab() {
     matches: 0,
   });
   const [standings, setStandings] = useState<Player[]>([]);
+  
+  // Edit modal state
+  const [editModalVisible, setEditModalVisible] = useState(false);
+  const [editingPlayer, setEditingPlayer] = useState<Player | null>(null);
+  const [editSkillLevel, setEditSkillLevel] = useState('');
+  const [editWins, setEditWins] = useState('');
+  const [editLosses, setEditLosses] = useState('');
 
   // Fetch league data
   const fetchLeagueData = async () => {
@@ -77,53 +93,113 @@ export default function LeagueTab() {
     );
   };
 
+  const toggleAdminMode = () => {
+    if (!isAdminMode) {
+      Alert.alert(
+        'Admin Mode',
+        'Enable admin mode to edit player stats?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Enable',
+            onPress: () => setIsAdminMode(true),
+          },
+        ]
+      );
+    } else {
+      setIsAdminMode(false);
+    }
+  };
+
+  const handleEditPlayer = (player: Player) => {
+    setEditingPlayer(player);
+    setEditSkillLevel(player.skillLevel.toString());
+    setEditWins(player.wins.toString());
+    setEditLosses(player.losses.toString());
+    setEditModalVisible(true);
+  };
+
+  const handleSavePlayerEdit = async () => {
+    if (!editingPlayer) return;
+
+    try {
+      const skillLevel = parseInt(editSkillLevel);
+      const wins = parseInt(editWins);
+      const losses = parseInt(editLosses);
+
+      if (isNaN(skillLevel) || skillLevel < 1 || skillLevel > 7) {
+        Alert.alert('Error', 'Skill level must be between 1 and 7');
+        return;
+      }
+
+      if (isNaN(wins) || isNaN(losses) || wins < 0 || losses < 0) {
+        Alert.alert('Error', 'Wins and losses must be valid numbers');
+        return;
+      }
+
+      setLoading(true);
+      
+      await updatePlayerSkillLevel(editingPlayer.id, skillLevel);
+      await updatePlayerRecord(editingPlayer.id, wins, losses);
+      
+      await fetchLeagueData();
+      setEditModalVisible(false);
+      Alert.alert('Success', 'Player updated successfully');
+    } catch (error) {
+      console.error('Error updating player:', error);
+      Alert.alert('Error', 'Failed to update player');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // If enrolled, show standings page, otherwise show signup page
   if (isEnrolled) {
-    return (
-      <SafeAreaView style={styles.container} edges={['top']}>
-        {/* Header */}
-        <View style={styles.header}>
-          <View style={styles.headerContent}>
-            <View style={styles.logoContainer}>
-              <View style={styles.logo}>
-                <View style={styles.logoInner} />
-              </View>
-              <View>
-                <Text style={styles.headerTitle}>CueU</Text>
-                <Text style={styles.headerSubtitle}>UW Pool Club</Text>
-              </View>
+  return (
+    <SafeAreaView style={styles.container} edges={['top']}>
+      {/* Header */}
+      <View style={styles.header}>
+        <View style={styles.headerContent}>
+          <View style={styles.logoContainer}>
+            <View style={styles.logo}>
+              <View style={styles.logoInner} />
+            </View>
+            <View>
+              <Text style={styles.headerTitle}>CueU</Text>
+              <Text style={styles.headerSubtitle}>UW Pool Club</Text>
             </View>
           </View>
         </View>
+      </View>
 
-        <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
-          <View style={styles.titleSection}>
-            <Text style={styles.pageTitle}>League</Text>
-            <Text style={styles.pageSubtitle}>Fall 2025 Season</Text>
-          </View>
+      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
+        <View style={styles.titleSection}>
+          <Text style={styles.pageTitle}>League</Text>
+          <Text style={styles.pageSubtitle}>Fall 2025 Season</Text>
+        </View>
 
-          {/* League Info Cards */}
-          <View style={styles.infoGrid}>
-            <View style={styles.infoCard}>
+        {/* League Info Cards */}
+        <View style={styles.infoGrid}>
+          <View style={styles.infoCard}>
               <Ionicons name="trophy-outline" color="#7C3AED" size={24} />
               <Text style={styles.infoValue}>{leagueStats.players}</Text>
-              <Text style={styles.infoLabel}>Players</Text>
-            </View>
-            <View style={styles.infoCard}>
+            <Text style={styles.infoLabel}>Players</Text>
+          </View>
+          <View style={styles.infoCard}>
               <Ionicons name="calendar-outline" color="#7C3AED" size={24} />
               <Text style={styles.infoValue}>Week {leagueStats.currentWeek}</Text>
               <Text style={styles.infoLabel}>of {leagueStats.totalWeeks}</Text>
-            </View>
-            <View style={styles.infoCard}>
+          </View>
+          <View style={styles.infoCard}>
               <Ionicons name="people-outline" color="#7C3AED" size={24} />
               <Text style={styles.infoValue}>{leagueStats.matches}</Text>
-              <Text style={styles.infoLabel}>Matches</Text>
-            </View>
+            <Text style={styles.infoLabel}>Matches</Text>
           </View>
+        </View>
 
-          {/* Standings */}
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>STANDINGS</Text>
+        {/* Standings */}
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>STANDINGS</Text>
             {loading ? (
               <View style={styles.loadingContainer}>
                 <ActivityIndicator size="large" color="#7C3AED" />
@@ -138,35 +214,128 @@ export default function LeagueTab() {
                 </Text>
               </View>
             ) : (
-              <View style={styles.standingsTable}>
-                <View style={styles.tableHeader}>
-                  <Text style={[styles.tableHeaderText, { flex: 0.7 }]}>Rank</Text>
-                  <Text style={[styles.tableHeaderText, { flex: 2 }]}>Player</Text>
-                  <Text style={[styles.tableHeaderText, { flex: 1 }]}>W-L</Text>
-                  <Text style={[styles.tableHeaderText, { flex: 1 }]}>Win %</Text>
-                </View>
+          <View style={styles.standingsTable}>
+            <View style={styles.tableHeader}>
+              <Text style={[styles.tableHeaderText, { flex: 0.7 }]}>Rank</Text>
+              <Text style={[styles.tableHeaderText, { flex: 2 }]}>Player</Text>
+                  <Text style={[styles.tableHeaderText, { flex: 0.8 }]}>Skill</Text>
+              <Text style={[styles.tableHeaderText, { flex: 1 }]}>W-L</Text>
+                  <Text style={[styles.tableHeaderText, { flex: 0.8 }]}>Win %</Text>
+                  {isAdminMode && <Text style={[styles.tableHeaderText, { flex: 0.5 }]}></Text>}
+            </View>
                 {standings.map((player, index) => (
-                  <View key={player.id} style={styles.tableRow}>
-                    <Text style={[styles.tableCellRank, { flex: 0.7 }]}>
+                  <TouchableOpacity 
+                    key={player.id} 
+                    style={styles.tableRow}
+                    onPress={() => isAdminMode && handleEditPlayer(player)}
+                    disabled={!isAdminMode}
+                  >
+                <Text style={[styles.tableCellRank, { flex: 0.7 }]}>
                       {index + 1 <= 3 ? 
                         (index + 1 === 1 ? '🥇' : index + 1 === 2 ? '🥈' : '🥉') 
                         : index + 1}
+                </Text>
+                <Text style={[styles.tableCell, { flex: 2, fontWeight: '600' }]}>
+                  {player.name}
+                </Text>
+                    <Text style={[styles.tableCell, { flex: 0.8, textAlign: 'center' }]}>
+                      {player.skillLevel}
                     </Text>
-                    <Text style={[styles.tableCell, { flex: 2, fontWeight: '600' }]}>
-                      {player.name}
-                    </Text>
-                    <Text style={[styles.tableCell, { flex: 1 }]}>
-                      {player.wins}-{player.losses}
-                    </Text>
-                    <Text style={[styles.tableCell, { flex: 1 }]}>
+                <Text style={[styles.tableCell, { flex: 1 }]}>
+                  {player.wins}-{player.losses}
+                </Text>
+                    <Text style={[styles.tableCell, { flex: 0.8 }]}>
                       {player.winRate}%
-                    </Text>
-                  </View>
+                </Text>
+                    {isAdminMode && (
+                      <TouchableOpacity 
+                        style={[styles.editButton, { flex: 0.5 }]}
+                        onPress={() => handleEditPlayer(player)}
+                      >
+                        <Ionicons name="pencil" size={16} color="#7C3AED" />
+                      </TouchableOpacity>
+                    )}
+                  </TouchableOpacity>
                 ))}
               </View>
             )}
           </View>
         </ScrollView>
+
+        {/* Edit Player Modal */}
+        <Modal
+          animationType="slide"
+          transparent={true}
+          visible={editModalVisible}
+          onRequestClose={() => setEditModalVisible(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Edit Player</Text>
+                <TouchableOpacity onPress={() => setEditModalVisible(false)}>
+                  <Ionicons name="close" size={24} color="#6B7280" />
+                </TouchableOpacity>
+              </View>
+
+              {editingPlayer && (
+                <>
+                  <Text style={styles.editPlayerName}>{editingPlayer.name}</Text>
+
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.inputLabel}>Skill Level (1-7)</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={editSkillLevel}
+                      onChangeText={setEditSkillLevel}
+                      keyboardType="number-pad"
+                      placeholder="5"
+                    />
+                  </View>
+
+                  <View style={styles.inputRow}>
+                    <View style={[styles.inputGroup, { flex: 1 }]}>
+                      <Text style={styles.inputLabel}>Wins</Text>
+                      <TextInput
+                        style={styles.input}
+                        value={editWins}
+                        onChangeText={setEditWins}
+                        keyboardType="number-pad"
+                        placeholder="0"
+                      />
+                    </View>
+
+                    <View style={[styles.inputGroup, { flex: 1, marginLeft: 12 }]}>
+                      <Text style={styles.inputLabel}>Losses</Text>
+                      <TextInput
+                        style={styles.input}
+                        value={editLosses}
+                        onChangeText={setEditLosses}
+                        keyboardType="number-pad"
+                        placeholder="0"
+                      />
+                    </View>
+                  </View>
+
+                  <View style={styles.modalButtons}>
+                    <TouchableOpacity 
+                      style={[styles.modalButton, styles.cancelButton]}
+                      onPress={() => setEditModalVisible(false)}
+                    >
+                      <Text style={styles.cancelButtonText}>Cancel</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity 
+                      style={[styles.modalButton, styles.saveButton]}
+                      onPress={handleSavePlayerEdit}
+                    >
+                      <Text style={styles.saveButtonText}>Save Changes</Text>
+                    </TouchableOpacity>
+                  </View>
+                </>
+              )}
+            </View>
+          </View>
+        </Modal>
       </SafeAreaView>
     );
   }
@@ -186,6 +355,13 @@ export default function LeagueTab() {
               <Text style={styles.headerSubtitle}>UW Pool Club</Text>
             </View>
           </View>
+          <TouchableOpacity onPress={toggleAdminMode} style={styles.adminButton}>
+            <Ionicons 
+              name={isAdminMode ? "shield-checkmark" : "shield-outline"} 
+              size={24} 
+              color={isAdminMode ? "#FCD34D" : "white"} 
+            />
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -365,6 +541,9 @@ const styles = StyleSheet.create({
   headerSubtitle: {
     fontSize: 12,
     color: '#FCD34D',
+  },
+  adminButton: {
+    padding: 8,
   },
   scrollView: {
     flex: 1,
@@ -674,6 +853,101 @@ const styles = StyleSheet.create({
     color: '#9CA3AF',
     textAlign: 'center',
     lineHeight: 20,
+  },
+  editButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 8,
+  },
+  // Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
+  },
+  modalContent: {
+    backgroundColor: 'white',
+    borderRadius: 16,
+    padding: 24,
+    width: '100%',
+    maxWidth: 400,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#1F2937',
+  },
+  editPlayerName: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#7C3AED',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  inputGroup: {
+    marginBottom: 16,
+  },
+  inputRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  inputLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 8,
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    fontSize: 16,
+    color: '#1F2937',
+    backgroundColor: '#F9FAFB',
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 24,
+  },
+  modalButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  cancelButton: {
+    backgroundColor: '#F3F4F6',
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+  },
+  cancelButtonText: {
+    color: '#6B7280',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  saveButton: {
+    backgroundColor: '#7C3AED',
+  },
+  saveButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
 
