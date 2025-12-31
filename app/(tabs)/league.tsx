@@ -1,22 +1,44 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { getAllPlayers, getLeagueStats, createTestPlayers, type Player, type LeagueStats } from '../../lib/leagueData';
 
 export default function LeagueTab() {
   const [isEnrolled, setIsEnrolled] = useState(false);
-
-  // League stats - will be updated from backend
-  const [leagueStats, setLeagueStats] = useState({
+  const [loading, setLoading] = useState(true);
+  const [leagueStats, setLeagueStats] = useState<LeagueStats>({
     players: 0,
     currentWeek: 1,
     totalWeeks: 12,
     matches: 0,
   });
+  const [standings, setStandings] = useState<Player[]>([]);
 
-  // Standings data - will be populated from backend
-  const [standings, setStandings] = useState<any[]>([]);
+  // Fetch league data
+  const fetchLeagueData = async () => {
+    try {
+      setLoading(true);
+      const [players, stats] = await Promise.all([
+        getAllPlayers(),
+        getLeagueStats(),
+      ]);
+      
+      setStandings(players);
+      setLeagueStats(stats);
+    } catch (error) {
+      console.error('Error fetching league data:', error);
+      Alert.alert('Error', 'Failed to load league data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Load data on mount
+  useEffect(() => {
+    fetchLeagueData();
+  }, []);
 
   const handleBypassSignup = () => {
     setIsEnrolled(true);
@@ -27,6 +49,32 @@ export default function LeagueTab() {
     console.log('Sign up for league');
     // For now, also set as enrolled
     setIsEnrolled(true);
+  };
+
+  const handleCreateTestPlayers = async () => {
+    Alert.alert(
+      'Create Test Players',
+      'This will add 5 test players to the league. Continue?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Create',
+          onPress: async () => {
+            try {
+              setLoading(true);
+              await createTestPlayers();
+              await fetchLeagueData();
+              Alert.alert('Success', 'Test players created!');
+            } catch (error) {
+              console.error('Error creating test players:', error);
+              Alert.alert('Error', 'Failed to create test players');
+            } finally {
+              setLoading(false);
+            }
+          },
+        },
+      ]
+    );
   };
 
   // If enrolled, show standings page, otherwise show signup page
@@ -76,7 +124,12 @@ export default function LeagueTab() {
           {/* Standings */}
           <View style={styles.card}>
             <Text style={styles.cardTitle}>STANDINGS</Text>
-            {standings.length === 0 ? (
+            {loading ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color="#7C3AED" />
+                <Text style={styles.loadingText}>Loading standings...</Text>
+              </View>
+            ) : standings.length === 0 ? (
               <View style={styles.emptyState}>
                 <Ionicons name="trophy-outline" size={48} color="#D1D5DB" />
                 <Text style={styles.emptyStateTitle}>No Standings Yet</Text>
@@ -92,12 +145,12 @@ export default function LeagueTab() {
                   <Text style={[styles.tableHeaderText, { flex: 1 }]}>W-L</Text>
                   <Text style={[styles.tableHeaderText, { flex: 1 }]}>Win %</Text>
                 </View>
-                {standings.map((player) => (
-                  <View key={player.rank} style={styles.tableRow}>
+                {standings.map((player, index) => (
+                  <View key={player.id} style={styles.tableRow}>
                     <Text style={[styles.tableCellRank, { flex: 0.7 }]}>
-                      {player.rank <= 3 ? 
-                        (player.rank === 1 ? '🥇' : player.rank === 2 ? '🥈' : '🥉') 
-                        : player.rank}
+                      {index + 1 <= 3 ? 
+                        (index + 1 === 1 ? '🥇' : index + 1 === 2 ? '🥈' : '🥉') 
+                        : index + 1}
                     </Text>
                     <Text style={[styles.tableCell, { flex: 2, fontWeight: '600' }]}>
                       {player.name}
@@ -106,7 +159,7 @@ export default function LeagueTab() {
                       {player.wins}-{player.losses}
                     </Text>
                     <Text style={[styles.tableCell, { flex: 1 }]}>
-                      {player.winRate}
+                      {player.winRate}%
                     </Text>
                   </View>
                 ))}
@@ -149,12 +202,17 @@ export default function LeagueTab() {
             <Ionicons name="construct-outline" size={20} color="#92400E" />
             <View style={styles.testingTextContainer}>
               <Text style={styles.testingTitle}>Testing Mode</Text>
-              <Text style={styles.testingSubtitle}>Skip signup to preview enrolled experience</Text>
+              <Text style={styles.testingSubtitle}>Skip signup or create test players</Text>
             </View>
           </View>
-          <TouchableOpacity style={styles.bypassButton} onPress={handleBypassSignup}>
-            <Text style={styles.bypassButtonText}>Bypass Signup</Text>
-          </TouchableOpacity>
+          <View style={styles.testingButtons}>
+            <TouchableOpacity style={styles.bypassButtonSmall} onPress={handleCreateTestPlayers}>
+              <Ionicons name="people" size={16} color="#92400E" />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.bypassButton} onPress={handleBypassSignup}>
+              <Text style={styles.bypassButtonText}>Bypass</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Hero CTA Card */}
@@ -360,6 +418,10 @@ const styles = StyleSheet.create({
     marginTop: 2,
     opacity: 0.8,
   },
+  testingButtons: {
+    flexDirection: 'row',
+    gap: 8,
+  },
   bypassButton: {
     backgroundColor: 'white',
     paddingHorizontal: 16,
@@ -367,6 +429,16 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1,
     borderColor: '#D97706',
+  },
+  bypassButtonSmall: {
+    backgroundColor: 'white',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#D97706',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   bypassButtonText: {
     color: '#92400E',
@@ -574,6 +646,16 @@ const styles = StyleSheet.create({
   tableCell: {
     fontSize: 14,
     color: '#1F2937',
+  },
+  loadingContainer: {
+    alignItems: 'center',
+    paddingVertical: 48,
+    paddingHorizontal: 24,
+  },
+  loadingText: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginTop: 12,
   },
   emptyState: {
     alignItems: 'center',
