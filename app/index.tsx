@@ -1,37 +1,76 @@
 import { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, KeyboardAvoidingView, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
+import * as Google from 'expo-auth-session/providers/google';
+import * as WebBrowser from 'expo-web-browser';
+import { signIn, signUp } from '../lib/firebase';
+
+// Complete the auth session on web
+WebBrowser.maybeCompleteAuthSession();
 
 export default function AuthScreen() {
-  const [email, setEmail] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [showReviewMode, setShowReviewMode] = useState(false);
+  const [reviewCode, setReviewCode] = useState('');
   const router = useRouter();
 
-  const handleSSO = () => {
-    setIsLoading(true);
-    // Simulate UW SSO authentication
-    setTimeout(() => {
+  // Google Sign-In configuration
+  // You'll need to add these to your .env file
+  const [request, response, promptAsync] = Google.useAuthRequest({
+    expoClientId: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID,
+    iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
+    androidClientId: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,
+    webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
+  });
+
+  const handleGoogleSignIn = async () => {
+    try {
+      setIsLoading(true);
+      const result = await promptAsync();
+
+      if (result?.type === 'success') {
+        const { authentication } = result;
+        
+        // Get user info from Google
+        const userInfoResponse = await fetch(
+          'https://www.googleapis.com/userinfo/v2/me',
+          {
+            headers: { Authorization: `Bearer ${authentication?.accessToken}` },
+          }
+        );
+        const userInfo = await userInfoResponse.json();
+
+        // Check if email is @uw.edu
+        if (!userInfo.email.endsWith('@uw.edu')) {
+          Alert.alert(
+            'Invalid Email',
+            'Only @uw.edu email addresses are allowed.',
+            [{ text: 'OK' }]
+          );
+          setIsLoading(false);
+          return;
+        }
+
+        // Sign in with Firebase (you can use the Google token here)
+        // For now, we'll just proceed to profile setup
+        router.push('/profile-setup');
+      }
+    } catch (error) {
+      console.error('Google Sign-In Error:', error);
+      Alert.alert('Error', 'Failed to sign in with Google');
+    } finally {
       setIsLoading(false);
-      router.push('/profile-setup');
-    }, 1500);
+    }
   };
 
-  const handleEmailVerify = () => {
-    if (!email.endsWith('@uw.edu')) {
-      alert('Please use a valid @uw.edu email address');
-      return;
+  const handleReviewMode = () => {
+    if (reviewCode === 'CUEU2025') {
+      router.push('/(tabs)');
+    } else {
+      Alert.alert('Invalid Code', 'Please enter a valid review access code');
     }
-
-    setIsLoading(true);
-    // Simulate email verification
-    setTimeout(() => {
-      setIsLoading(false);
-      setTimeout(() => {
-        router.push('/profile-setup');
-      }, 1000);
-    }, 1500);
   };
 
   const handleSkipAuth = () => {
@@ -39,203 +78,193 @@ export default function AuthScreen() {
   };
 
   return (
-    <LinearGradient
-      colors={['#7C3AED', '#6D28D9', '#5B21B6']}
-      style={styles.container}
-    >
-      <SafeAreaView style={styles.safeArea}>
-        <KeyboardAvoidingView 
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={styles.keyboardView}
-        >
-          <ScrollView 
-            contentContainerStyle={styles.scrollContent}
-            keyboardShouldPersistTaps="handled"
-          >
-            {/* Logo/Header */}
-            <View style={styles.header}>
-              <View style={styles.logoOuter}>
-                <View style={styles.logoMiddle}>
-                  <View style={styles.logoInner} />
-                </View>
-              </View>
-              <Text style={styles.title}>CueU</Text>
-              <Text style={styles.subtitle}>University of Washington Pool Club</Text>
-            </View>
-
-            {/* Auth Card */}
-            <View style={styles.card}>
-              <View style={styles.cardHeader}>
-                <Text style={styles.cardTitle}>Welcome to CueU</Text>
-                <Text style={styles.cardDescription}>
-                  Sign in with your UW credentials to join the pool club
-                </Text>
-              </View>
-
-              <View style={styles.cardContent}>
-                <TouchableOpacity
-                  style={[styles.button, styles.primaryButton, isLoading && styles.buttonDisabled]}
-                  onPress={handleSSO}
-                  disabled={isLoading}
-                >
-                  <Text style={styles.buttonText}>🛡️ Sign in with UW SSO</Text>
-                </TouchableOpacity>
-
-                <View style={styles.divider}>
-                  <View style={styles.dividerLine} />
-                  <Text style={styles.dividerText}>OR</Text>
-                  <View style={styles.dividerLine} />
-                </View>
-
-                <View style={styles.inputContainer}>
-                  <Text style={styles.label}>UW Email Address</Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="husky@uw.edu"
-                    placeholderTextColor="#9CA3AF"
-                    value={email}
-                    onChangeText={setEmail}
-                    keyboardType="email-address"
-                    autoCapitalize="none"
-                    editable={!isLoading}
-                  />
-                  <Text style={styles.helperText}>
-                    A verification link will be sent to your email
-                  </Text>
-                </View>
-
-                <TouchableOpacity
-                  style={[styles.button, styles.primaryButton, (isLoading || !email) && styles.buttonDisabled]}
-                  onPress={handleEmailVerify}
-                  disabled={isLoading || !email}
-                >
-                  <Text style={styles.buttonText}>
-                    {isLoading ? 'Sending...' : 'Send Verification Link'}
-                  </Text>
-                </TouchableOpacity>
-
-                <View style={styles.badge}>
-                  <Text style={styles.badgeText}>UW Students & Staff Only</Text>
-                </View>
+    <SafeAreaView style={styles.container}>
+      <KeyboardAvoidingView 
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.keyboardView}
+      >
+        <View style={styles.content}>
+          {/* Logo and Title */}
+          <View style={styles.header}>
+            <View style={styles.logoContainer}>
+              <View style={styles.logo}>
+                <View style={styles.logoInner} />
               </View>
             </View>
+            <Text style={styles.title}>CueU</Text>
+            <Text style={styles.subtitle}>Find your activity partners at UW</Text>
+          </View>
 
-            <Text style={styles.footer}>
-              By signing in, you agree to the UW Pool Club terms and conditions
+          {/* Sign In Card */}
+          <View style={styles.card}>
+            <Ionicons name="logo-google" size={64} color="#7C3AED" style={styles.googleIcon} />
+            
+            <Text style={styles.cardTitle}>Sign in with Google</Text>
+            <Text style={styles.cardDescription}>
+              Use your @uw.edu account to continue
             </Text>
 
-            {/* Skip Login for Testing */}
-            <View style={styles.skipContainer}>
-              <TouchableOpacity
-                style={[styles.button, styles.outlineButton]}
-                onPress={handleSkipAuth}
-              >
-                <Text style={styles.outlineButtonText}>Skip Login (Testing Only)</Text>
-              </TouchableOpacity>
-              <Text style={styles.skipText}>
-                For development and testing purposes
+            <TouchableOpacity
+              style={[styles.googleButton, isLoading && styles.buttonDisabled]}
+              onPress={handleGoogleSignIn}
+              disabled={isLoading}
+            >
+              <Ionicons name="logo-google" size={24} color="white" />
+              <Text style={styles.googleButtonText}>
+                {isLoading ? 'Signing in...' : 'Sign in with Google'}
               </Text>
+            </TouchableOpacity>
+
+            <Text style={styles.restrictionText}>
+              Only @uw.edu email addresses are allowed.
+            </Text>
+
+            {/* Review Mode Toggle */}
+            <View style={styles.divider}>
+              <View style={styles.dividerLine} />
             </View>
-          </ScrollView>
-        </KeyboardAvoidingView>
-      </SafeAreaView>
-    </LinearGradient>
+
+            <TouchableOpacity 
+              onPress={() => setShowReviewMode(!showReviewMode)}
+              style={styles.reviewToggle}
+            >
+              <Text style={styles.reviewToggleText}>
+                {showReviewMode ? 'Hide' : ''} Review Mode Access
+              </Text>
+              <Ionicons 
+                name={showReviewMode ? "chevron-up" : "chevron-down"} 
+                size={20} 
+                color="#6B7280" 
+              />
+            </TouchableOpacity>
+
+            {showReviewMode && (
+              <View style={styles.reviewSection}>
+                <Text style={styles.reviewTitle}>App Store Review Access</Text>
+                <Text style={styles.reviewDescription}>
+                  Enter the review access code to test the app without a UW email.
+                </Text>
+                
+                <TextInput
+                  style={styles.reviewInput}
+                  placeholder="Enter review access code"
+                  placeholderTextColor="#9CA3AF"
+                  value={reviewCode}
+                  onChangeText={setReviewCode}
+                  autoCapitalize="characters"
+                />
+
+                <TouchableOpacity
+                  style={[styles.reviewButton, !reviewCode && styles.buttonDisabled]}
+                  onPress={handleReviewMode}
+                  disabled={!reviewCode}
+                >
+                  <Text style={styles.reviewButtonText}>Access Review Mode</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+
+          {/* Testing Skip Button */}
+          <TouchableOpacity
+            style={styles.skipButton}
+            onPress={handleSkipAuth}
+          >
+            <Text style={styles.skipButtonText}>Skip Login (Testing Only)</Text>
+          </TouchableOpacity>
+        </View>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
-  safeArea: {
-    flex: 1,
+    backgroundColor: '#F9FAFB',
   },
   keyboardView: {
     flex: 1,
   },
-  scrollContent: {
-    flexGrow: 1,
-    padding: 20,
+  content: {
+    flex: 1,
     justifyContent: 'center',
+    padding: 24,
   },
   header: {
     alignItems: 'center',
-    marginBottom: 32,
+    marginBottom: 40,
   },
-  logoOuter: {
-    width: 80,
-    height: 80,
-    backgroundColor: 'white',
-    borderRadius: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
+  logoContainer: {
+    marginBottom: 20,
   },
-  logoMiddle: {
-    width: 48,
-    height: 48,
-    backgroundColor: '#7C3AED',
-    borderRadius: 24,
+  logo: {
+    width: 72,
+    height: 72,
+    backgroundColor: '#FCD34D',
+    borderRadius: 36,
     alignItems: 'center',
     justifyContent: 'center',
   },
   logoInner: {
-    width: 32,
-    height: 32,
-    backgroundColor: '#FCD34D',
-    borderRadius: 16,
+    width: 48,
+    height: 48,
+    backgroundColor: '#7C3AED',
+    borderRadius: 24,
   },
   title: {
-    fontSize: 32,
+    fontSize: 48,
     fontWeight: 'bold',
-    color: 'white',
+    color: '#7C3AED',
     marginBottom: 8,
   },
   subtitle: {
     fontSize: 16,
-    color: '#FCD34D',
+    color: '#6B7280',
   },
   card: {
     backgroundColor: 'white',
-    borderRadius: 12,
-    padding: 20,
+    borderRadius: 16,
+    padding: 32,
+    alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.05,
     shadowRadius: 8,
-    elevation: 5,
+    elevation: 3,
   },
-  cardHeader: {
-    marginBottom: 20,
+  googleIcon: {
+    marginBottom: 24,
   },
   cardTitle: {
     fontSize: 24,
-    fontWeight: 'bold',
+    fontWeight: '600',
     color: '#1F2937',
-    marginBottom: 8,
+    marginBottom: 12,
   },
   cardDescription: {
     fontSize: 14,
     color: '#6B7280',
+    textAlign: 'center',
+    marginBottom: 24,
   },
-  cardContent: {
-    gap: 16,
-  },
-  button: {
-    paddingVertical: 16,
-    paddingHorizontal: 24,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  primaryButton: {
+  googleButton: {
     backgroundColor: '#7C3AED',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+    borderRadius: 12,
+    width: '100%',
+    shadowColor: '#7C3AED',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
   },
-  buttonText: {
+  googleButtonText: {
     color: 'white',
     fontSize: 16,
     fontWeight: '600',
@@ -243,83 +272,80 @@ const styles = StyleSheet.create({
   buttonDisabled: {
     opacity: 0.5,
   },
+  restrictionText: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    textAlign: 'center',
+    marginTop: 16,
+  },
   divider: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginVertical: 8,
+    width: '100%',
+    marginVertical: 24,
   },
   dividerLine: {
-    flex: 1,
     height: 1,
     backgroundColor: '#E5E7EB',
   },
-  dividerText: {
-    paddingHorizontal: 8,
-    fontSize: 12,
-    color: '#9CA3AF',
-    textTransform: 'uppercase',
-  },
-  inputContainer: {
+  reviewToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 8,
+    paddingVertical: 12,
   },
-  label: {
+  reviewToggleText: {
     fontSize: 14,
+    color: '#6B7280',
     fontWeight: '500',
-    color: '#374151',
   },
-  input: {
+  reviewSection: {
+    width: '100%',
+    marginTop: 16,
+    gap: 12,
+  },
+  reviewTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1F2937',
+    textAlign: 'center',
+  },
+  reviewDescription: {
+    fontSize: 12,
+    color: '#6B7280',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  reviewInput: {
     borderWidth: 1,
     borderColor: '#D1D5DB',
     borderRadius: 8,
     paddingVertical: 12,
     paddingHorizontal: 16,
-    fontSize: 16,
-    color: '#1F2937',
-  },
-  helperText: {
-    fontSize: 12,
-    color: '#6B7280',
-  },
-  badge: {
-    backgroundColor: '#F3F4F6',
-    borderRadius: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  badgeText: {
     fontSize: 14,
-    fontWeight: '500',
-    color: '#4B5563',
-  },
-  footer: {
+    color: '#1F2937',
+    backgroundColor: '#F9FAFB',
     textAlign: 'center',
-    fontSize: 12,
-    color: 'rgba(255, 255, 255, 0.7)',
-    marginTop: 24,
   },
-  skipContainer: {
-    marginTop: 24,
-    paddingTop: 24,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 255, 255, 0.1)',
+  reviewButton: {
+    backgroundColor: '#7C3AED',
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+    alignItems: 'center',
   },
-  outlineButton: {
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
-  },
-  outlineButtonText: {
+  reviewButtonText: {
     color: 'white',
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '600',
   },
-  skipText: {
-    textAlign: 'center',
+  skipButton: {
+    marginTop: 24,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  skipButtonText: {
+    color: '#9CA3AF',
     fontSize: 12,
-    color: 'rgba(255, 255, 255, 0.5)',
-    marginTop: 8,
+    textDecorationLine: 'underline',
   },
 });
 
