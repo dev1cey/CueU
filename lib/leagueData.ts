@@ -8,6 +8,7 @@ import {
   getDocs,
   query,
   orderBy,
+  where,
   updateDoc,
   Timestamp,
 } from 'firebase/firestore';
@@ -36,7 +37,19 @@ export interface Match {
   player2Name: string;
   player2Score: number;
   date: string;
-  completed: boolean;
+  status: 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
+  createdAt?: any;
+  updatedAt?: any;
+}
+
+export interface User {
+  id: string;
+  email: string;
+  name: string;
+  skillLevel: number; // Will be set by admin, starts at 0
+  department?: string;
+  bio?: string;
+  isPlayer: boolean; // Whether they've joined the league
   createdAt?: any;
   updatedAt?: any;
 }
@@ -48,7 +61,127 @@ export interface LeagueStats {
   matches: number;
 }
 
-// Create a new player
+// ==================== USER MANAGEMENT ====================
+
+// Create or update user profile
+export const createOrUpdateUser = async (userData: Omit<User, 'id' | 'createdAt' | 'updatedAt'>, userId?: string) => {
+  try {
+    const uid = userId || `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const userRef = doc(db, 'users', uid);
+    
+    const existingUser = await getDoc(userRef);
+    
+    if (existingUser.exists()) {
+      // Update existing user
+      await updateDoc(userRef, {
+        ...userData,
+        updatedAt: Timestamp.now(),
+      });
+    } else {
+      // Create new user
+      await setDoc(userRef, {
+        ...userData,
+        skillLevel: 0, // Default, will be set by admin
+        createdAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
+      });
+    }
+    
+    return uid;
+  } catch (error: any) {
+    console.error('Error creating/updating user:', error);
+    throw new Error(error.message);
+  }
+};
+
+// Get user by ID
+export const getUser = async (userId: string): Promise<User | null> => {
+  try {
+    const userRef = doc(db, 'users', userId);
+    const userDoc = await getDoc(userRef);
+    
+    if (userDoc.exists()) {
+      return { id: userDoc.id, ...userDoc.data() } as User;
+    }
+    return null;
+  } catch (error: any) {
+    console.error('Error getting user:', error);
+    throw new Error(error.message);
+  }
+};
+
+// Get all users (for admin)
+export const getAllUsers = async (): Promise<User[]> => {
+  try {
+    const usersRef = collection(db, 'users');
+    const querySnapshot = await getDocs(usersRef);
+    
+    const users: User[] = [];
+    querySnapshot.forEach((doc) => {
+      users.push({ id: doc.id, ...doc.data() } as User);
+    });
+    
+    return users;
+  } catch (error: any) {
+    console.error('Error getting users:', error);
+    throw new Error(error.message);
+  }
+};
+
+// Get users who have joined the league
+export const getLeaguePlayers = async (): Promise<User[]> => {
+  try {
+    const usersRef = collection(db, 'users');
+    const q = query(usersRef, where('isPlayer', '==', true));
+    const querySnapshot = await getDocs(q);
+    
+    const players: User[] = [];
+    querySnapshot.forEach((doc) => {
+      players.push({ id: doc.id, ...doc.data() } as User);
+    });
+    
+    return players;
+  } catch (error: any) {
+    console.error('Error getting league players:', error);
+    throw new Error(error.message);
+  }
+};
+
+// Join league (convert user to player)
+export const joinLeague = async (userId: string) => {
+  try {
+    const userRef = doc(db, 'users', userId);
+    await updateDoc(userRef, {
+      isPlayer: true,
+      updatedAt: Timestamp.now(),
+    });
+    
+    // Create player entry in players collection
+    const user = await getUser(userId);
+    if (user) {
+      await createPlayer({
+        name: user.name,
+        email: user.email,
+        skillLevel: user.skillLevel || 3, // Default to 3 if not set
+        wins: 0,
+        losses: 0,
+        winRate: 0,
+        gamesPlayed: 0,
+      });
+    }
+    
+    // Update league player count
+    const stats = await getLeagueStats();
+    await updateLeagueStats({
+      players: stats.players + 1,
+    });
+  } catch (error: any) {
+    console.error('Error joining league:', error);
+    throw new Error(error.message);
+  }
+};
+
+// ==================== PLAYER MANAGEMENT (existing code) ====================
 export const createPlayer = async (playerData: Omit<Player, 'id' | 'createdAt' | 'updatedAt'>) => {
   try {
     const playerId = `player_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -284,7 +417,7 @@ export const createMatch = async (matchData: Omit<Match, 'id' | 'createdAt' | 'u
     });
     
     // Update player stats if match is completed
-    if (matchData.completed) {
+    if (matchData.status === 'completed') {
       await updatePlayersAfterMatch(matchData);
     }
     
@@ -346,6 +479,146 @@ export const getAllMatches = async (): Promise<Match[]> => {
     return matches;
   } catch (error: any) {
     console.error('Error getting matches:', error);
+    throw new Error(error.message);
+  }
+};
+
+// ==================== ADMIN MATCHUP MANAGEMENT ====================
+
+// Create matchup for the week (admin only)
+export const createWeeklyMatchup = async (
+  week: number,
+  player1Id: string,
+  player2Id: string,
+  date: string
+): Promise<string> => {
+  try {
+    const player1 = await getPlayer(player1Id);
+    const player2 = await getPlayer(player2Id);
+    
+    if (!player1 || !player2) {
+      throw new Error('Players not found');
+    }
+    
+    const matchId = `match_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const matchRef = doc(db, 'matches', matchId);
+    
+    await setDoc(matchRef, {
+      week,
+      player1Id,
+      player1Name: player1.name,
+      player1Score: 0,
+      player2Id,
+      player2Name: player2.name,
+      player2Score: 0,
+      date,
+      status: 'scheduled',
+      createdAt: Timestamp.now(),
+      updatedAt: Timestamp.now(),
+    });
+    
+    return matchId;
+  } catch (error: any) {
+    console.error('Error creating matchup:', error);
+    throw new Error(error.message);
+  }
+};
+
+// Get matches for a specific week
+export const getMatchesByWeek = async (week: number): Promise<Match[]> => {
+  try {
+    const matchesRef = collection(db, 'matches');
+    const q = query(matchesRef, where('week', '==', week));
+    const querySnapshot = await getDocs(q);
+    
+    const matches: Match[] = [];
+    querySnapshot.forEach((doc) => {
+      matches.push({ id: doc.id, ...doc.data() } as Match);
+    });
+    
+    return matches;
+  } catch (error: any) {
+    console.error('Error getting matches by week:', error);
+    throw new Error(error.message);
+  }
+};
+
+// Update match score (admin only)
+export const updateMatchScore = async (
+  matchId: string,
+  player1Score: number,
+  player2Score: number
+) => {
+  try {
+    const matchRef = doc(db, 'matches', matchId);
+    await updateDoc(matchRef, {
+      player1Score,
+      player2Score,
+      updatedAt: Timestamp.now(),
+    });
+  } catch (error: any) {
+    console.error('Error updating match score:', error);
+    throw new Error(error.message);
+  }
+};
+
+// Complete a match and update player stats (admin only)
+export const completeMatch = async (matchId: string) => {
+  try {
+    const matchRef = doc(db, 'matches', matchId);
+    const matchDoc = await getDoc(matchRef);
+    
+    if (!matchDoc.exists()) {
+      throw new Error('Match not found');
+    }
+    
+    const matchData = matchDoc.data() as Match;
+    
+    // Update match status
+    await updateDoc(matchRef, {
+      status: 'completed',
+      updatedAt: Timestamp.now(),
+    });
+    
+    // Update player stats
+    const player1Won = matchData.player1Score > matchData.player2Score;
+    
+    const player1 = await getPlayer(matchData.player1Id);
+    const player2 = await getPlayer(matchData.player2Id);
+    
+    if (player1 && player2) {
+      await updatePlayerStats(matchData.player1Id, {
+        wins: player1.wins + (player1Won ? 1 : 0),
+        losses: player1.losses + (player1Won ? 0 : 1),
+      });
+      
+      await updatePlayerStats(matchData.player2Id, {
+        wins: player2.wins + (player1Won ? 0 : 1),
+        losses: player2.losses + (player1Won ? 1 : 0),
+      });
+      
+      // Update league stats
+      const stats = await getLeagueStats();
+      await updateLeagueStats({
+        matches: stats.matches + 1,
+      });
+    }
+  } catch (error: any) {
+    console.error('Error completing match:', error);
+    throw new Error(error.message);
+  }
+};
+
+// Delete a match (admin only)
+export const deleteMatch = async (matchId: string) => {
+  try {
+    const matchRef = doc(db, 'matches', matchId);
+    await updateDoc(matchRef, {
+      status: 'cancelled',
+      updatedAt: Timestamp.now(),
+    });
+  } catch (error: any) {
+    console.error('Error deleting match:', error);
     throw new Error(error.message);
   }
 };

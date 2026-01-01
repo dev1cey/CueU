@@ -1,29 +1,68 @@
 import { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Alert } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Alert, ActivityIndicator } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Picker } from '@react-native-picker/picker';
+import { createOrUpdateUser, joinLeague } from '../lib/leagueData';
 
 export default function ProfileSetup() {
   const [name, setName] = useState('');
+  const [email, setEmail] = useState('student@uw.edu'); // Will be set from Google Sign-In
   const [skillLevel, setSkillLevel] = useState('');
   const [department, setDepartment] = useState('');
   const [bio, setBio] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!name || !skillLevel || !department) {
       Alert.alert('Error', 'Please fill in all required fields');
       return;
     }
 
-    Alert.alert('Success', 'Profile created successfully!', [
-      {
-        text: 'OK',
-        onPress: () => router.replace('/(tabs)'),
-      },
-    ]);
+    try {
+      setIsLoading(true);
+      
+      // Convert skill level to number (1-7 APA style)
+      const skillLevelMap: { [key: string]: number } = {
+        'beginner': 2,
+        'intermediate': 4,
+        'advanced': 6,
+        'expert': 7,
+      };
+      
+      const numericSkillLevel = skillLevelMap[skillLevel] || 3;
+      
+      // Create user profile
+      const userId = await createOrUpdateUser({
+        email,
+        name,
+        skillLevel: numericSkillLevel,
+        department,
+        bio,
+        isPlayer: false, // Not joined league yet
+      });
+      
+      // Join league
+      await joinLeague(userId);
+      
+      Alert.alert(
+        'Success',
+        'Welcome to the UW Pool League! Your profile has been created.',
+        [
+          {
+            text: 'OK',
+            onPress: () => router.replace('/(tabs)'),
+          },
+        ]
+      );
+    } catch (error) {
+      console.error('Error creating profile:', error);
+      Alert.alert('Error', 'Failed to create profile. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -64,7 +103,7 @@ export default function ProfileSetup() {
                   <Text style={styles.label}>Email</Text>
                   <TextInput
                     style={[styles.input, styles.inputDisabled]}
-                    value="student@uw.edu"
+                    value={email}
                     editable={false}
                   />
                 </View>
@@ -128,12 +167,17 @@ export default function ProfileSetup() {
                 </View>
 
                 <TouchableOpacity
-                  style={styles.submitButton}
+                  style={[styles.submitButton, isLoading && styles.submitButtonDisabled]}
                   onPress={handleSubmit}
+                  disabled={isLoading}
                 >
-                  <Text style={styles.submitButtonText}>
-                    Complete Profile & Join League
-                  </Text>
+                  {isLoading ? (
+                    <ActivityIndicator color="white" />
+                  ) : (
+                    <Text style={styles.submitButtonText}>
+                      Complete Profile & Join League
+                    </Text>
+                  )}
                 </TouchableOpacity>
               </View>
             </View>
@@ -236,6 +280,9 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 16,
     fontWeight: '600',
+  },
+  submitButtonDisabled: {
+    opacity: 0.6,
   },
 });
 
