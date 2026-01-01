@@ -211,4 +211,3 @@ await signInWithCredential(auth, credential);
 - [Google OAuth 2.0](https://developers.google.com/identity/protocols/oauth2)
 - [Firebase Google Sign-In](https://firebase.google.com/docs/auth/web/google-signin)
 
-
