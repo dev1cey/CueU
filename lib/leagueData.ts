@@ -32,9 +32,13 @@ export interface Match {
   week: number;
   player1Id: string;
   player1Name: string;
+  player1SkillLevel: number;
+  player1RaceTo: number; // How many racks player 1 needs to win
   player1Score: number;
   player2Id: string;
   player2Name: string;
+  player2SkillLevel: number;
+  player2RaceTo: number; // How many racks player 2 needs to win
   player2Score: number;
   date: string;
   status: 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
@@ -57,9 +61,37 @@ export interface User {
 export interface LeagueStats {
   players: number;
   currentWeek: number;
-  totalWeeks: number;
+  totalWeeks: number; // Always 7
   matches: number;
 }
+
+// ==================== APA HANDICAPPING SYSTEM ====================
+
+// Official APA 8-Ball "Games Must Win" Chart
+// Based on https://poolplayers.com/equalizer/
+// Rule: The differential in games must equal the differential in skill levels
+// Returns [player1RaceTo, player2RaceTo] based on skill levels
+export const calculateAPARace = (skill1: number, skill2: number): [number, number] => {
+  // Official APA 8-Ball race chart (skill levels 2-7)
+  // New players start at SL3
+  const raceChart: { [key: string]: [number, number] } = {
+    // Format: "skill1-skill2": [player1RaceTo, player2RaceTo]
+    "2-2": [2, 2], "2-3": [2, 3], "2-4": [2, 4], "2-5": [2, 5], "2-6": [2, 6], "2-7": [2, 7],
+    "3-2": [3, 2], "3-3": [2, 2], "3-4": [2, 3], "3-5": [2, 4], "3-6": [2, 5], "3-7": [2, 6],
+    "4-2": [4, 2], "4-3": [3, 2], "4-4": [3, 3], "4-5": [3, 4], "4-6": [3, 5], "4-7": [3, 6],
+    "5-2": [5, 2], "5-3": [4, 2], "5-4": [4, 3], "5-5": [4, 4], "5-6": [4, 5], "5-7": [4, 6],
+    "6-2": [6, 2], "6-3": [5, 2], "6-4": [5, 3], "6-5": [5, 4], "6-6": [5, 5], "6-7": [5, 6],
+    "7-2": [7, 2], "7-3": [6, 2], "7-4": [6, 3], "7-5": [6, 4], "7-6": [6, 5], "7-7": [6, 6],
+  };
+  
+  // Clamp skill levels to valid range (2-7)
+  // New players default to 3, but we'll handle 1 as 2 for flexibility
+  const adjustedSkill1 = Math.max(2, Math.min(7, skill1));
+  const adjustedSkill2 = Math.max(2, Math.min(7, skill2));
+  
+  const key = `${adjustedSkill1}-${adjustedSkill2}`;
+  return raceChart[key] || [5, 5]; // Default to race-to-5 if not found
+};
 
 // ==================== USER MANAGEMENT ====================
 
@@ -485,12 +517,74 @@ export const getAllMatches = async (): Promise<Match[]> => {
 
 // ==================== ADMIN MATCHUP MANAGEMENT ====================
 
+// Shuffle array randomly (Fisher-Yates algorithm)
+const shuffleArray = <T,>(array: T[]): T[] => {
+  const shuffled = [...array];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+};
+
+// Create randomized matchups for Week 1
+export const createWeek1Matchups = async (date: string): Promise<string[]> => {
+  try {
+    const players = await getAllPlayers();
+    
+    if (players.length < 2) {
+      throw new Error('Need at least 2 players to create matchups');
+    }
+    
+    // Randomize player order
+    const shuffledPlayers = shuffleArray(players);
+    
+    const matchIds: string[] = [];
+    
+    // Pair players sequentially
+    for (let i = 0; i < shuffledPlayers.length - 1; i += 2) {
+      const player1 = shuffledPlayers[i];
+      const player2 = shuffledPlayers[i + 1];
+      
+      // Calculate race-to numbers based on APA handicapping
+      const [p1RaceTo, p2RaceTo] = calculateAPARace(player1.skillLevel, player2.skillLevel);
+      
+      const matchId = await createWeeklyMatchup(
+        1,
+        player1.id,
+        player2.id,
+        date,
+        player1.skillLevel,
+        player2.skillLevel,
+        p1RaceTo,
+        p2RaceTo
+      );
+      
+      matchIds.push(matchId);
+    }
+    
+    // If odd number of players, one gets a bye
+    if (shuffledPlayers.length % 2 !== 0) {
+      console.log(`Player ${shuffledPlayers[shuffledPlayers.length - 1].name} has a bye this week`);
+    }
+    
+    return matchIds;
+  } catch (error: any) {
+    console.error('Error creating Week 1 matchups:', error);
+    throw new Error(error.message);
+  }
+};
+
 // Create matchup for the week (admin only)
 export const createWeeklyMatchup = async (
   week: number,
   player1Id: string,
   player2Id: string,
-  date: string
+  date: string,
+  player1SkillLevel?: number,
+  player2SkillLevel?: number,
+  player1RaceTo?: number,
+  player2RaceTo?: number
 ): Promise<string> => {
   try {
     const player1 = await getPlayer(player1Id);
@@ -500,6 +594,18 @@ export const createWeeklyMatchup = async (
       throw new Error('Players not found');
     }
     
+    // Use provided skill levels or get from player data
+    const p1Skill = player1SkillLevel ?? player1.skillLevel;
+    const p2Skill = player2SkillLevel ?? player2.skillLevel;
+    
+    // Calculate race-to if not provided
+    let p1Race = player1RaceTo;
+    let p2Race = player2RaceTo;
+    
+    if (!p1Race || !p2Race) {
+      [p1Race, p2Race] = calculateAPARace(p1Skill, p2Skill);
+    }
+    
     const matchId = `match_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const matchRef = doc(db, 'matches', matchId);
     
@@ -507,9 +613,13 @@ export const createWeeklyMatchup = async (
       week,
       player1Id,
       player1Name: player1.name,
+      player1SkillLevel: p1Skill,
+      player1RaceTo: p1Race,
       player1Score: 0,
       player2Id,
       player2Name: player2.name,
+      player2SkillLevel: p2Skill,
+      player2RaceTo: p2Race,
       player2Score: 0,
       date,
       status: 'scheduled',

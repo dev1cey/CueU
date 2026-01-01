@@ -9,9 +9,12 @@ import {
   createTestPlayers, 
   updatePlayerSkillLevel,
   updatePlayerRecord,
+  getMatchupsByWeek,
   type Player, 
-  type LeagueStats 
+  type LeagueStats,
+  type Match 
 } from '../../lib/leagueData';
+import { getCurrentUser } from '../../lib/firebase';
 
 export default function LeagueTab() {
   const [isEnrolled, setIsEnrolled] = useState(false);
@@ -20,10 +23,12 @@ export default function LeagueTab() {
   const [leagueStats, setLeagueStats] = useState<LeagueStats>({
     players: 0,
     currentWeek: 1,
-    totalWeeks: 12,
+    totalWeeks: 7,
     matches: 0,
   });
   const [standings, setStandings] = useState<Player[]>([]);
+  const [currentUserStats, setCurrentUserStats] = useState<Player | null>(null);
+  const [upcomingMatches, setUpcomingMatches] = useState<Match[]>([]);
   
   // Edit modal state
   const [editModalVisible, setEditModalVisible] = useState(false);
@@ -43,6 +48,22 @@ export default function LeagueTab() {
       
       setStandings(players);
       setLeagueStats(stats);
+
+      // Get current user's stats
+      const currentUser = await getCurrentUser();
+      if (currentUser?.email) {
+        const userPlayer = players.find(p => p.email === currentUser.email);
+        setCurrentUserStats(userPlayer || null);
+        
+        // Get upcoming matches for current user
+        if (userPlayer) {
+          const weekMatches = await getMatchupsByWeek(stats.currentWeek);
+          const userMatches = weekMatches.filter(
+            m => m.player1Id === userPlayer.id || m.player2Id === userPlayer.id
+          );
+          setUpcomingMatches(userMatches);
+        }
+      }
     } catch (error) {
       console.error('Error fetching league data:', error);
       Alert.alert('Error', 'Failed to load league data');
@@ -169,37 +190,137 @@ export default function LeagueTab() {
               <Text style={styles.headerSubtitle}>UW Pool Club</Text>
             </View>
           </View>
+          <TouchableOpacity onPress={toggleAdminMode} style={styles.adminButton}>
+            <Ionicons 
+              name={isAdminMode ? "shield-checkmark" : "shield-outline"} 
+              size={24} 
+              color={isAdminMode ? "#FCD34D" : "white"} 
+            />
+          </TouchableOpacity>
         </View>
       </View>
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
         <View style={styles.titleSection}>
-          <Text style={styles.pageTitle}>League</Text>
-          <Text style={styles.pageSubtitle}>Fall 2025 Season</Text>
+          <Text style={styles.pageTitle}>League Dashboard</Text>
+          <Text style={styles.pageSubtitle}>Winter 2025 Season</Text>
         </View>
 
-        {/* League Info Cards */}
-        <View style={styles.infoGrid}>
-          <View style={styles.infoCard}>
-              <Ionicons name="trophy-outline" color="#7C3AED" size={24} />
-              <Text style={styles.infoValue}>{leagueStats.players}</Text>
-            <Text style={styles.infoLabel}>Players</Text>
+        {/* Your Stats Card */}
+        {currentUserStats && (
+          <LinearGradient
+            colors={['#7C3AED', '#A78BFA', '#C4B5AA', '#D4AF37']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={styles.yourStatsCard}
+          >
+            <View style={styles.statsHeader}>
+              <View style={styles.statsIconContainer}>
+                <Ionicons name="trophy" size={24} color="white" />
+              </View>
+              <View>
+                <Text style={styles.statsTitle}>Your Stats</Text>
+                <Text style={styles.statsSubtitle}>Active League Member</Text>
+              </View>
+            </View>
+
+            <View style={styles.statsGrid}>
+              <View style={styles.statItem}>
+                <Text style={styles.statValue}>{currentUserStats.skillLevel}</Text>
+                <Text style={styles.statLabel}>Skill Level</Text>
+              </View>
+              <View style={styles.statItem}>
+                <Text style={styles.statValue}>
+                  #{standings.findIndex(p => p.id === currentUserStats.id) + 1}
+                </Text>
+                <Text style={styles.statLabel}>Rank</Text>
+              </View>
+              <View style={styles.statItem}>
+                <Text style={styles.statValue}>{currentUserStats.wins}</Text>
+                <Text style={styles.statLabel}>Wins</Text>
+              </View>
+              <View style={styles.statItem}>
+                <Text style={styles.statValue}>{currentUserStats.losses}</Text>
+                <Text style={styles.statLabel}>Losses</Text>
+              </View>
+            </View>
+          </LinearGradient>
+        )}
+
+        {/* Upcoming Matches */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Upcoming Matches</Text>
+          <Text style={styles.sectionSubtitle}>Your scheduled matches this week</Text>
+
+          {upcomingMatches.length === 0 ? (
+            <View style={styles.emptyMatchesCard}>
+              <Ionicons name="calendar-outline" size={32} color="#D1D5DB" />
+              <Text style={styles.emptyMatchesText}>No upcoming matches</Text>
+            </View>
+          ) : (
+            <View style={styles.matchesList}>
+              {upcomingMatches.map((match) => {
+                const isPlayer1 = match.player1Id === currentUserStats?.id;
+                const opponentName = isPlayer1 ? match.player2Name : match.player1Name;
+                const opponentSkill = isPlayer1 ? match.player2SkillLevel : match.player1SkillLevel;
+                const status = match.status;
+
+                return (
+                  <View key={match.id} style={styles.matchCard}>
+                    <View style={styles.matchHeader}>
+                      <Text style={styles.matchOpponent}>
+                        vs {opponentName}
+                        <Text style={styles.matchSkillLevel}> SL {opponentSkill}</Text>
+                      </Text>
+                      <View style={[
+                        styles.statusBadge,
+                        status === 'scheduled' && styles.statusScheduled,
+                        status === 'in_progress' && styles.statusInProgress,
+                        status === 'completed' && styles.statusCompleted,
+                      ]}>
+                        <Text style={styles.statusText}>
+                          {status === 'scheduled' ? 'Scheduled' : 
+                           status === 'in_progress' ? 'In Progress' : 
+                           status === 'completed' ? 'Completed' : 'Needs Result'}
+                        </Text>
+                      </View>
+                    </View>
+
+                    <View style={styles.matchDetails}>
+                      <View style={styles.matchInfo}>
+                        <Ionicons name="calendar" size={14} color="#6B7280" />
+                        <Text style={styles.matchInfoText}>{match.date}</Text>
+                      </View>
+                      <View style={styles.matchInfo}>
+                        <Ionicons name="location" size={14} color="#6B7280" />
+                        <Text style={styles.matchInfoText}>HUB Games Area</Text>
+                      </View>
+                    </View>
+
+                    <View style={styles.matchActions}>
+                      <TouchableOpacity style={styles.chatButton}>
+                        <Ionicons name="chatbubble-outline" size={16} color="#6B7280" />
+                        <Text style={styles.chatButtonText}>Chat</Text>
+                      </TouchableOpacity>
+                      {status !== 'completed' && (
+                        <TouchableOpacity style={styles.reportButton}>
+                          <Text style={styles.reportButtonText}>Report Result</Text>
+                        </TouchableOpacity>
+                      )}
           </View>
-          <View style={styles.infoCard}>
-              <Ionicons name="calendar-outline" color="#7C3AED" size={24} />
-              <Text style={styles.infoValue}>Week {leagueStats.currentWeek}</Text>
-              <Text style={styles.infoLabel}>of {leagueStats.totalWeeks}</Text>
           </View>
-          <View style={styles.infoCard}>
-              <Ionicons name="people-outline" color="#7C3AED" size={24} />
-              <Text style={styles.infoValue}>{leagueStats.matches}</Text>
-            <Text style={styles.infoLabel}>Matches</Text>
+                );
+              })}
           </View>
+          )}
         </View>
 
         {/* Standings */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Player Standings</Text>
+          <Text style={styles.sectionSubtitle}>Winter 2025 Season Rankings</Text>
+          
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>STANDINGS</Text>
             {loading ? (
               <View style={styles.loadingContainer}>
                 <ActivityIndicator size="large" color="#7C3AED" />
@@ -216,51 +337,59 @@ export default function LeagueTab() {
             ) : (
           <View style={styles.standingsTable}>
             <View style={styles.tableHeader}>
-              <Text style={[styles.tableHeaderText, { flex: 0.7 }]}>Rank</Text>
+                  <Text style={[styles.tableHeaderText, { flex: 0.6 }]}>Rank</Text>
               <Text style={[styles.tableHeaderText, { flex: 2 }]}>Player</Text>
-                  <Text style={[styles.tableHeaderText, { flex: 0.8 }]}>Skill</Text>
-              <Text style={[styles.tableHeaderText, { flex: 1 }]}>W-L</Text>
-                  <Text style={[styles.tableHeaderText, { flex: 0.8 }]}>Win %</Text>
-                  {isAdminMode && <Text style={[styles.tableHeaderText, { flex: 0.5 }]}></Text>}
-            </View>
-                {standings.map((player, index) => (
-                  <TouchableOpacity 
-                    key={player.id} 
-                    style={styles.tableRow}
-                    onPress={() => isAdminMode && handleEditPlayer(player)}
-                    disabled={!isAdminMode}
-                  >
-                <Text style={[styles.tableCellRank, { flex: 0.7 }]}>
-                      {index + 1 <= 3 ? 
-                        (index + 1 === 1 ? '🥇' : index + 1 === 2 ? '🥈' : '🥉') 
-                        : index + 1}
-                </Text>
-                <Text style={[styles.tableCell, { flex: 2, fontWeight: '600' }]}>
-                  {player.name}
-                </Text>
-                    <Text style={[styles.tableCell, { flex: 0.8, textAlign: 'center' }]}>
-                      {player.skillLevel}
-                    </Text>
-                <Text style={[styles.tableCell, { flex: 1 }]}>
-                  {player.wins}-{player.losses}
-                </Text>
-                    <Text style={[styles.tableCell, { flex: 0.8 }]}>
-                      {player.winRate}%
-                </Text>
-                    {isAdminMode && (
-                      <TouchableOpacity 
-                        style={[styles.editButton, { flex: 0.5 }]}
-                        onPress={() => handleEditPlayer(player)}
-                      >
-                        <Ionicons name="pencil" size={16} color="#7C3AED" />
-                      </TouchableOpacity>
-                    )}
-                  </TouchableOpacity>
-                ))}
+                  <Text style={[styles.tableHeaderText, { flex: 1 }]}>Record</Text>
+                  <Text style={[styles.tableHeaderText, { flex: 0.6 }]}>SL</Text>
+                  <Text style={[styles.tableHeaderText, { flex: 0.8 }]}>Points</Text>
+                  {isAdminMode && <Text style={[styles.tableHeaderText, { flex: 0.4 }]}></Text>}
+                </View>
+                {standings.map((player, index) => {
+                  // Calculate points: 2 per win, 1 per loss (example system)
+                  const points = (player.wins * 2) + (player.losses * 1);
+                  
+                  return (
+                    <TouchableOpacity 
+                      key={player.id} 
+                      style={styles.tableRow}
+                      onPress={() => isAdminMode && handleEditPlayer(player)}
+                      disabled={!isAdminMode}
+                    >
+                      <Text style={[styles.tableCellRank, { flex: 0.6 }]}>
+                        {index + 1 <= 3 ? 
+                          (index + 1 === 1 ? '🥇' : index + 1 === 2 ? '🥈' : '🥉') 
+                          : index + 1}
+                      </Text>
+                      <Text style={[styles.tableCell, { flex: 2, fontWeight: '600' }]}>
+                        {player.name}
+                      </Text>
+                      <View style={[styles.recordCell, { flex: 1 }]}>
+                        <Text style={styles.recordWins}>{player.wins}</Text>
+                        <Text style={styles.recordSeparator}> - </Text>
+                        <Text style={styles.recordLosses}>{player.losses}</Text>
+                      </View>
+                      <Text style={[styles.tableCell, { flex: 0.6, textAlign: 'center' }]}>
+                        {player.skillLevel}
+                      </Text>
+                      <Text style={[styles.tableCell, { flex: 0.8, fontWeight: '700', color: '#7C3AED' }]}>
+                        {points}
+                      </Text>
+                      {isAdminMode && (
+                        <TouchableOpacity 
+                          style={[styles.editButton, { flex: 0.4 }]}
+                          onPress={() => handleEditPlayer(player)}
+                        >
+                          <Ionicons name="pencil" size={16} color="#7C3AED" />
+                        </TouchableOpacity>
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
             )}
           </View>
-        </ScrollView>
+        </View>
+      </ScrollView>
 
         {/* Edit Player Modal */}
         <Modal
@@ -751,6 +880,194 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   // Standings Page Styles
+  yourStatsCard: {
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  statsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 20,
+  },
+  statsIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  statsTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: 'white',
+  },
+  statsSubtitle: {
+    fontSize: 13,
+    color: 'rgba(255, 255, 255, 0.85)',
+    marginTop: 2,
+  },
+  statsGrid: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  statItem: {
+    flex: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+  },
+  statValue: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: 'white',
+    marginBottom: 4,
+  },
+  statLabel: {
+    fontSize: 12,
+    color: 'rgba(255, 255, 255, 0.9)',
+  },
+  matchesList: {
+    gap: 12,
+  },
+  matchCard: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+    borderWidth: 1,
+    borderColor: '#F3F4F6',
+  },
+  matchHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  matchOpponent: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1F2937',
+  },
+  matchSkillLevel: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#6B7280',
+  },
+  statusBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  statusScheduled: {
+    backgroundColor: '#DBEAFE',
+  },
+  statusInProgress: {
+    backgroundColor: '#FEF3C7',
+  },
+  statusCompleted: {
+    backgroundColor: '#D1FAE5',
+  },
+  statusText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#374151',
+  },
+  matchDetails: {
+    gap: 8,
+    marginBottom: 12,
+  },
+  matchInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  matchInfoText: {
+    fontSize: 13,
+    color: '#6B7280',
+  },
+  matchActions: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
+  },
+  chatButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  chatButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#6B7280',
+  },
+  reportButton: {
+    flex: 1,
+    paddingVertical: 10,
+    backgroundColor: '#7C3AED',
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  reportButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: 'white',
+  },
+  emptyMatchesCard: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 32,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  emptyMatchesText: {
+    fontSize: 14,
+    color: '#9CA3AF',
+    marginTop: 8,
+  },
+  recordCell: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  recordWins: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#10B981',
+  },
+  recordSeparator: {
+    fontSize: 14,
+    color: '#9CA3AF',
+  },
+  recordLosses: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#EF4444',
+  },
   infoGrid: {
     flexDirection: 'row',
     gap: 12,
