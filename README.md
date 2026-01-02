@@ -69,6 +69,7 @@ npm run android
 CueU/
 ├── app/                      # App screens and navigation
 │   ├── (tabs)/              # Bottom tab navigation
+│   │   ├── _layout.tsx      # Tab navigation layout
 │   │   ├── index.tsx        # Home screen
 │   │   ├── news.tsx         # News screen
 │   │   ├── league.tsx       # League screen
@@ -77,8 +78,6 @@ CueU/
 │   ├── index.tsx            # Auth/Login screen
 │   └── profile-setup.tsx    # Profile setup screen
 ├── assets/                   # Images, fonts, and other assets
-├── styles/                   # Global styles
-│   └── global.css           # Tailwind CSS styles
 ├── app.json                 # Expo configuration
 ├── package.json             # Dependencies
 └── README.md                # This file
@@ -155,10 +154,10 @@ The app supports hot reloading. Any changes you make to the code will automatica
 - **React Native** - Mobile framework
 - **Expo** - Development platform
 - **Expo Router** - File-based routing
-- **NativeWind** - Tailwind CSS for React Native
 - **Lucide React Native** - Icon library
 - **React Native Reanimated** - Animations
 - **React Native Gesture Handler** - Touch gestures
+- **React Native StyleSheet** - Component styling
 
 ## Troubleshooting
 
@@ -188,15 +187,15 @@ npm install
 npm start -- --clear
 ```
 
-## Converting from Web to Mobile
+## Design & Architecture
 
-This app was converted from a web application. The key changes include:
+This app is built with:
 
-- Replaced HTML elements with React Native components (`View`, `Text`, `ScrollView`, etc.)
-- Converted CSS to StyleSheet API
-- Replaced web-specific libraries with React Native equivalents
-- Implemented mobile-specific navigation with Expo Router
-- Adapted UI/UX for mobile touch interactions
+- **Component-based architecture** using React Native components (`View`, `Text`, `ScrollView`, etc.)
+- **StyleSheet API** for component styling with consistent design tokens
+- **File-based routing** with Expo Router for navigation
+- **Mobile-first UI/UX** optimized for touch interactions
+- **Type safety** with TypeScript interfaces
 
 ## Contributing
 

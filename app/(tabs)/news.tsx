@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 interface NewsItem {
@@ -7,7 +7,6 @@ interface NewsItem {
   date: string;
   author: string;
   content: string;
-  image?: string;
 }
 
 export default function NewsTab() {
@@ -180,4 +179,3 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
 });
-
