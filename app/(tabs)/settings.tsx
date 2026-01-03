@@ -3,13 +3,15 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { User, Bell, Moon, Lock, HelpCircle, LogOut, ChevronRight } from 'lucide-react-native';
 import { useState } from 'react';
 import { useRouter } from 'expo-router';
+import { useAuth } from '../../contexts/AuthContext';
 
 export default function SettingsTab() {
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [darkModeEnabled, setDarkModeEnabled] = useState(false);
   const router = useRouter();
+  const { currentUser, logout } = useAuth();
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     Alert.alert(
       'Logout',
       'Are you sure you want to logout?',
@@ -18,7 +20,10 @@ export default function SettingsTab() {
         { 
           text: 'Logout', 
           style: 'destructive',
-          onPress: () => router.replace('/'),
+          onPress: async () => {
+            await logout();
+            router.replace('/');
+          },
         },
       ]
     );
@@ -55,7 +60,9 @@ export default function SettingsTab() {
                 <User color="#7C3AED" size={20} />
                 <View>
                   <Text style={styles.menuItemTitle}>Profile Information</Text>
-                  <Text style={styles.menuItemSubtitle}>Test User • Intermediate</Text>
+                  <Text style={styles.menuItemSubtitle}>
+                    {currentUser ? `${currentUser.name} • ${currentUser.skillLevel}` : 'Not logged in'}
+                  </Text>
                 </View>
               </View>
               <ChevronRight color="#9CA3AF" size={20} />

@@ -1,13 +1,15 @@
 import { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Alert } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useAuth } from '../contexts/AuthContext';
 
 export default function AuthScreen() {
   const [email, setEmail] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
+  const { login } = useAuth();
 
   const handleSSO = () => {
     setIsLoading(true);
@@ -34,8 +36,24 @@ export default function AuthScreen() {
     }, 1500);
   };
 
-  const handleSkipAuth = () => {
-    router.push('/(tabs)');
+  const handleSkipAuth = async () => {
+    // Use test-user-1 from seeded data
+    const TEST_PLAYER_ID = 'UUtPL20HxNTYVlSJhs1e'; // test-user-1
+    
+    try {
+      setIsLoading(true);
+      await login(TEST_PLAYER_ID);
+      router.push('/(tabs)');
+    } catch (error) {
+      console.error('Error logging in as test player:', error);
+      Alert.alert(
+        'Login Error',
+        'Failed to log in as test-user-1. Please check if the user exists in the database.',
+        [{ text: 'OK' }]
+      );
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -127,10 +145,13 @@ export default function AuthScreen() {
             {/* Skip Login for Testing */}
             <View style={styles.skipContainer}>
               <TouchableOpacity
-                style={[styles.button, styles.outlineButton]}
+                style={[styles.button, styles.outlineButton, isLoading && styles.buttonDisabled]}
                 onPress={handleSkipAuth}
+                disabled={isLoading}
               >
-                <Text style={styles.outlineButtonText}>Skip Login (Testing Only)</Text>
+                <Text style={styles.outlineButtonText}>
+                  {isLoading ? 'Logging in as test-user-1...' : 'Skip Login (Testing Only)'}
+                </Text>
               </TouchableOpacity>
               <Text style={styles.skipText}>
                 For development and testing purposes

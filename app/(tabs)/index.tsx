@@ -1,16 +1,11 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Calendar, MapPin, Trophy, Bell, ChevronRight } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-
-interface ClubEvent {
-  id: string;
-  title: string;
-  date: string;
-  time: string;
-  location: string;
-  organizer: string;
-}
+import { useTopPlayers } from '../../hooks/useUsers';
+import { useUpcomingEvents } from '../../hooks/useEvents';
+import { useActiveSeason } from '../../hooks/useSeasons';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface QuickStat {
   label: string;
@@ -19,48 +14,37 @@ interface QuickStat {
 }
 
 export default function HomeTab() {
-  // Mock Club Events
-  const events: ClubEvent[] = [
-    {
-      id: '1',
-      title: 'Holiday Party',
-      date: 'Dec 24',
-      time: '6:00 pm',
-      location: 'HUB Games Area',
-      organizer: 'UW Pool Club'
-    },
-    {
-      id: '2',
-      title: 'Beginner Workshop',
-      date: 'Dec 26',
-      time: '2:00 pm',
-      location: 'IMA Recreation Center',
-      organizer: 'UW Pool Club'
-    },
-    {
-      id: '3',
-      title: 'Winter Tournament',
-      date: 'Dec 28',
-      time: '10:00 am',
-      location: 'HUB Games Area',
-      organizer: 'UW Pool Club'
-    }
+  // Fetch data from Firebase
+  const { players: topPlayers, loading: playersLoading } = useTopPlayers(3);
+  const { events, loading: eventsLoading } = useUpcomingEvents();
+  const { season, loading: seasonLoading } = useActiveSeason();
+  const { currentUser } = useAuth();
+
+  // Calculate win rate (always compute from wins/matches)
+  const calculateWinRate = (user: typeof currentUser) => {
+    if (!user) return 0;
+    if (user.matchesPlayed === 0) return 0;
+    return (user.wins / user.matchesPlayed) * 100;
+  };
+
+  // User stats based on logged in user
+  const quickStats: QuickStat[] = currentUser ? [
+    { label: 'Skill Level', value: currentUser.skillLevel, subtext: currentUser.skillLevel.charAt(0).toUpperCase() + currentUser.skillLevel.slice(1) },
+    { label: 'Win Rate', value: `${calculateWinRate(currentUser).toFixed(0)}%`, subtext: `${currentUser.wins}-${currentUser.losses} record` },
+    { label: 'Rank', value: '-', subtext: 'of players' },
+    { label: 'Matches', value: `${currentUser.matchesPlayed}`, subtext: 'total played' }
+  ] : [
+    { label: 'Skill Level', value: '-', subtext: 'Not logged in' },
+    { label: 'Win Rate', value: '-', subtext: '-' },
+    { label: 'Rank', value: '-', subtext: '-' },
+    { label: 'Matches', value: '-', subtext: '-' }
   ];
 
-  // Mock Quick Stats
-  const quickStats: QuickStat[] = [
-    { label: 'Skill Level', value: '5', subtext: 'Intermediate' },
-    { label: 'Win Rate', value: '67%', subtext: '8-4 record' },
-    { label: 'Rank', value: '#7', subtext: 'of 45 players' },
-    { label: 'Matches', value: '12', subtext: 'this season' }
-  ];
-
-  // Mock Top Rankings
-  const topRankings = [
-    { rank: 1, name: 'Friday Mufasa', wins: 13, losses: 1 },
-    { rank: 2, name: 'Oxygen', wins: 14, losses: 2 },
-    { rank: 3, name: 'Fluke Twofer', wins: 12, losses: 4 }
-  ];
+  const formatEventDate = (timestamp: any) => {
+    if (!timestamp) return '';
+    const date = timestamp.toDate();
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  };
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -86,7 +70,9 @@ export default function HomeTab() {
         {/* Welcome Section */}
         <View style={styles.welcomeSection}>
           <Text style={styles.sectionTitle}>Dashboard</Text>
-          <Text style={styles.welcomeText}>Welcome back!</Text>
+          <Text style={styles.welcomeText}>
+            {currentUser ? `Welcome back, ${currentUser.name.split(' ')[0]}!` : 'Welcome!'}
+          </Text>
         </View>
 
         {/* Upcoming Matches Notice */}
@@ -122,64 +108,94 @@ export default function HomeTab() {
           <View style={styles.cardHeader}>
             <View>
               <Text style={styles.cardTitle}>TOP RANKINGS</Text>
-              <Text style={styles.cardDescription}>Fall 2025 Leaders</Text>
+              <Text style={styles.cardDescription}>
+                {seasonLoading ? 'Loading...' : season ? season.name : 'Current Season'}
+              </Text>
             </View>
             <TouchableOpacity style={styles.viewAllButton}>
               <Text style={styles.viewAllText}>View All</Text>
               <ChevronRight color="#7C3AED" size={16} />
             </TouchableOpacity>
           </View>
-          <View style={styles.rankingsList}>
-            {topRankings.map((player) => (
-              <TouchableOpacity key={player.rank} style={styles.rankingItem}>
-                <Text style={styles.rankingEmoji}>
-                  {player.rank === 1 && '🥇'}
-                  {player.rank === 2 && '🥈'}
-                  {player.rank === 3 && '🥉'}
-                </Text>
-                <View style={styles.rankingInfo}>
-                  <Text style={styles.rankingName}>{player.name}</Text>
-                  <View style={styles.recordContainer}>
-                    <Text style={styles.wins}>{player.wins}</Text>
-                    <Text style={styles.recordSeparator}> - </Text>
-                    <Text style={styles.losses}>{player.losses}</Text>
+          
+          {playersLoading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#7C3AED" />
+              <Text style={styles.loadingText}>Loading rankings...</Text>
+            </View>
+          ) : topPlayers.length > 0 ? (
+            <View style={styles.rankingsList}>
+              {topPlayers.map((player, index) => (
+                <TouchableOpacity key={player.id} style={styles.rankingItem}>
+                  <Text style={styles.rankingEmoji}>
+                    {index === 0 && '🥇'}
+                    {index === 1 && '🥈'}
+                    {index === 2 && '🥉'}
+                  </Text>
+                  <View style={styles.rankingInfo}>
+                    <Text style={styles.rankingName}>{player.name}</Text>
+                    <View style={styles.recordContainer}>
+                      <Text style={styles.wins}>{player.wins}</Text>
+                      <Text style={styles.recordSeparator}> - </Text>
+                      <Text style={styles.losses}>{player.losses}</Text>
+                    </View>
                   </View>
-                </View>
-                <ChevronRight color="#9CA3AF" size={16} />
-              </TouchableOpacity>
-            ))}
-          </View>
+                  <ChevronRight color="#9CA3AF" size={16} />
+                </TouchableOpacity>
+              ))}
+            </View>
+          ) : (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyStateText}>No rankings available yet</Text>
+              <Text style={styles.emptyStateSubtext}>Start playing matches to see rankings!</Text>
+            </View>
+          )}
         </View>
 
         {/* Events Section */}
         <View style={styles.card}>
           <View style={styles.cardHeader}>
-            <Text style={styles.cardTitle}>EVENTS</Text>
+            <Text style={styles.cardTitle}>UPCOMING EVENTS</Text>
             <TouchableOpacity style={styles.viewAllButton}>
               <Text style={styles.viewAllText}>See All</Text>
               <ChevronRight color="#7C3AED" size={16} />
             </TouchableOpacity>
           </View>
-          <View style={styles.eventsList}>
-            {events.map((event) => (
-              <TouchableOpacity key={event.id} style={styles.eventItem}>
-                <View style={styles.eventIconContainer}>
-                  <Trophy color="#7C3AED" size={20} />
-                </View>
-                <View style={styles.eventInfo}>
-                  <Text style={styles.eventTitle}>{event.title}</Text>
-                  <View style={styles.eventDetails}>
-                    <Calendar color="#6B7280" size={12} />
-                    <Text style={styles.eventDetailText}>{event.date}, {event.time}</Text>
+          
+          {eventsLoading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#7C3AED" />
+              <Text style={styles.loadingText}>Loading events...</Text>
+            </View>
+          ) : events.length > 0 ? (
+            <View style={styles.eventsList}>
+              {events.slice(0, 3).map((event) => (
+                <TouchableOpacity key={event.id} style={styles.eventItem}>
+                  <View style={styles.eventIconContainer}>
+                    <Trophy color="#7C3AED" size={20} />
                   </View>
-                  <View style={styles.eventDetails}>
-                    <MapPin color="#6B7280" size={12} />
-                    <Text style={styles.eventDetailText}>{event.location}</Text>
+                  <View style={styles.eventInfo}>
+                    <Text style={styles.eventTitle}>{event.title}</Text>
+                    <View style={styles.eventDetails}>
+                      <Calendar color="#6B7280" size={12} />
+                      <Text style={styles.eventDetailText}>
+                        {formatEventDate(event.date)}, {event.time}
+                      </Text>
+                    </View>
+                    <View style={styles.eventDetails}>
+                      <MapPin color="#6B7280" size={12} />
+                      <Text style={styles.eventDetailText}>{event.location}</Text>
+                    </View>
                   </View>
-                </View>
-              </TouchableOpacity>
-            ))}
-          </View>
+                </TouchableOpacity>
+              ))}
+            </View>
+          ) : (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyStateText}>No upcoming events</Text>
+              <Text style={styles.emptyStateSubtext}>Check back soon for new events!</Text>
+            </View>
+          )}
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -358,6 +374,32 @@ const styles = StyleSheet.create({
   statSubtext: {
     fontSize: 11,
     color: '#6B7280',
+  },
+  loadingContainer: {
+    padding: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: '#6B7280',
+  },
+  emptyState: {
+    padding: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyStateText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 4,
+  },
+  emptyStateSubtext: {
+    fontSize: 14,
+    color: '#6B7280',
+    textAlign: 'center',
   },
   rankingsList: {
     gap: 8,

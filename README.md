@@ -18,6 +18,7 @@ Before you begin, ensure you have the following installed:
 - **npm** or **yarn**
 - **Expo CLI** - Install with `npm install -g expo-cli`
 - **iOS Simulator** (Mac only) or physical iOS device with Expo Go app
+- **Firebase Account** - [Sign up free](https://firebase.google.com/)
 
 ### For iOS Development
 
@@ -33,7 +34,21 @@ Before you begin, ensure you have the following installed:
 npm install
 ```
 
-### 2. Start the Development Server
+### 2. Set Up Firebase Backend
+
+This app uses Firebase for backend storage. Follow the setup guide:
+
+📖 **[Firebase Setup Guide](./FIREBASE_SETUP.md)** - Complete step-by-step instructions
+
+Quick steps:
+1. Create a Firebase project at https://console.firebase.google.com/
+2. Enable Firestore Database
+3. Copy your Firebase config
+4. Update `firebase/config.ts` with your credentials
+
+See [FIREBASE_QUICKSTART.md](./FIREBASE_QUICKSTART.md) for a quick reference.
+
+### 3. Start the Development Server
 
 ```bash
 npm start
@@ -41,7 +56,7 @@ npm start
 
 This will start the Expo development server. You'll see a QR code in your terminal.
 
-### 3. Run on iOS
+### 4. Run on iOS
 
 #### Option A: iOS Simulator (Mac only)
 
@@ -57,7 +72,7 @@ This will automatically open the iOS Simulator and launch the app.
 2. Scan the QR code from the terminal using your iPhone camera
 3. The app will open in Expo Go
 
-### 4. Run on Android (Optional)
+### 5. Run on Android (Optional)
 
 ```bash
 npm run android
@@ -70,14 +85,32 @@ CueU/
 ├── app/                      # App screens and navigation
 │   ├── (tabs)/              # Bottom tab navigation
 │   │   ├── _layout.tsx      # Tab navigation layout
-│   │   ├── index.tsx        # Home screen
+│   │   ├── index.tsx        # Home screen (Firebase integrated)
 │   │   ├── news.tsx         # News screen
 │   │   ├── league.tsx       # League screen
 │   │   └── settings.tsx     # Settings screen
 │   ├── _layout.tsx          # Root layout
 │   ├── index.tsx            # Auth/Login screen
 │   └── profile-setup.tsx    # Profile setup screen
+├── firebase/                 # Firebase backend
+│   ├── config.ts            # Firebase configuration
+│   ├── types.ts             # TypeScript type definitions
+│   └── services/            # Firebase service modules
+│       ├── userService.ts   # User operations
+│       ├── matchService.ts  # Match operations
+│       ├── eventService.ts  # Event operations
+│       ├── newsService.ts   # News operations
+│       └── seasonService.ts # Season operations
+├── hooks/                    # Custom React hooks
+│   ├── useUsers.ts          # User data hooks
+│   ├── useEvents.ts         # Event data hooks
+│   ├── useNews.ts           # News data hooks
+│   ├── useMatches.ts        # Match data hooks
+│   └── useSeasons.ts        # Season data hooks
 ├── assets/                   # Images, fonts, and other assets
+├── FIREBASE_SETUP.md        # Detailed Firebase setup guide
+├── FIREBASE_QUICKSTART.md   # Quick Firebase reference
+├── FIREBASE_SUMMARY.md      # Complete Firebase documentation
 ├── app.json                 # Expo configuration
 ├── package.json             # Dependencies
 └── README.md                # This file
@@ -154,10 +187,35 @@ The app supports hot reloading. Any changes you make to the code will automatica
 - **React Native** - Mobile framework
 - **Expo** - Development platform
 - **Expo Router** - File-based routing
+- **Firebase** - Backend database and authentication
+  - **Firestore** - NoSQL database
+  - **Firebase Auth** - User authentication
+- **TypeScript** - Type safety
 - **Lucide React Native** - Icon library
 - **React Native Reanimated** - Animations
 - **React Native Gesture Handler** - Touch gestures
 - **React Native StyleSheet** - Component styling
+
+## Firebase Backend
+
+This app uses Firebase for:
+- 📊 **Data Storage** - User profiles, matches, events, news, and seasons
+- 🔐 **Authentication** - User login and registration (optional)
+- 📸 **Storage** - Profile pictures and images (future)
+- 🔄 **Real-time Updates** - Live data synchronization (future)
+
+### Firebase Collections
+
+1. **users** - User profiles and statistics
+2. **matches** - Pool match records and results
+3. **events** - Club events and RSVPs
+4. **news** - News articles and announcements
+5. **seasons** - League season information
+
+For complete documentation:
+- **[Firebase Setup Guide](./FIREBASE_SETUP.md)** - Step-by-step Firebase Console setup
+- **[Firebase Quick Start](./FIREBASE_QUICKSTART.md)** - Quick reference and examples
+- **[Firebase Summary](./FIREBASE_SUMMARY.md)** - Complete API documentation
 
 ## Troubleshooting
 
@@ -196,6 +254,53 @@ This app is built with:
 - **File-based routing** with Expo Router for navigation
 - **Mobile-first UI/UX** optimized for touch interactions
 - **Type safety** with TypeScript interfaces
+- **Firebase backend** with service layer architecture
+- **Custom React hooks** for data fetching and state management
+- **Error handling** and loading states throughout
+
+## Usage Examples
+
+### Fetching Data with Hooks
+
+```typescript
+import { useTopPlayers } from './hooks/useUsers';
+import { useUpcomingEvents } from './hooks/useEvents';
+
+function MyComponent() {
+  const { players, loading } = useTopPlayers(10);
+  const { events } = useUpcomingEvents();
+  
+  if (loading) return <ActivityIndicator />;
+  
+  return (
+    <View>
+      {players.map(player => (
+        <Text key={player.id}>{player.name}</Text>
+      ))}
+    </View>
+  );
+}
+```
+
+### Creating Data with Services
+
+```typescript
+import { createUser, rsvpToEvent } from './firebase/services';
+
+// Create user profile
+await createUser('user-id', {
+  email: 'student@uw.edu',
+  name: 'John Husky',
+  department: 'engineering',
+  skillLevel: 'intermediate',
+  bio: 'Love pool!'
+});
+
+// RSVP to event
+await rsvpToEvent('event-id', 'user-id');
+```
+
+See [FIREBASE_QUICKSTART.md](./FIREBASE_QUICKSTART.md) for more examples.
 
 ## Contributing
 
