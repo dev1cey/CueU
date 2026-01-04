@@ -1,15 +1,25 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Trophy, Calendar, Users } from 'lucide-react-native';
+import { useActiveSeason } from '../../hooks/useSeasons';
+import { useTopPlayers } from '../../hooks/useUsers';
 
 export default function LeagueTab() {
-  const standings = [
-    { rank: 1, name: 'Friday Mufasa', wins: 13, losses: 1, winRate: '93%' },
-    { rank: 2, name: 'Oxygen', wins: 14, losses: 2, winRate: '88%' },
-    { rank: 3, name: 'Fluke Twofer', wins: 12, losses: 4, winRate: '75%' },
-    { rank: 4, name: 'Pocket Pro', wins: 10, losses: 5, winRate: '67%' },
-    { rank: 5, name: 'Cue Master', wins: 9, losses: 6, winRate: '60%' },
-  ];
+  const { season, loading: seasonLoading } = useActiveSeason();
+  const { players, loading: playersLoading } = useTopPlayers(10);
+
+  const loading = seasonLoading || playersLoading;
+
+  // Calculate standings with win rate
+  const standings = players.map((player, index) => ({
+    rank: index + 1,
+    name: player.name,
+    wins: player.wins,
+    losses: player.losses,
+    winRate: player.matchesPlayed > 0 
+      ? `${Math.round((player.wins / player.matchesPlayed) * 100)}%`
+      : '0%',
+  }));
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -31,58 +41,80 @@ export default function LeagueTab() {
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
         <View style={styles.titleSection}>
           <Text style={styles.pageTitle}>League</Text>
-          <Text style={styles.pageSubtitle}>Fall 2025 Season</Text>
+          <Text style={styles.pageSubtitle}>
+            {season ? season.name : 'No Active Season'}
+          </Text>
         </View>
 
         {/* League Info Cards */}
-        <View style={styles.infoGrid}>
-          <View style={styles.infoCard}>
-            <Trophy color="#7C3AED" size={24} />
-            <Text style={styles.infoValue}>45</Text>
-            <Text style={styles.infoLabel}>Players</Text>
+        {loading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#7C3AED" />
           </View>
-          <View style={styles.infoCard}>
-            <Calendar color="#7C3AED" size={24} />
-            <Text style={styles.infoValue}>Week 8</Text>
-            <Text style={styles.infoLabel}>of 12</Text>
-          </View>
-          <View style={styles.infoCard}>
-            <Users color="#7C3AED" size={24} />
-            <Text style={styles.infoValue}>128</Text>
-            <Text style={styles.infoLabel}>Matches</Text>
-          </View>
-        </View>
-
-        {/* Standings */}
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>STANDINGS</Text>
-          <View style={styles.standingsTable}>
-            <View style={styles.tableHeader}>
-              <Text style={[styles.tableHeaderText, { flex: 0.7 }]}>Rank</Text>
-              <Text style={[styles.tableHeaderText, { flex: 2 }]}>Player</Text>
-              <Text style={[styles.tableHeaderText, { flex: 1 }]}>W-L</Text>
-              <Text style={[styles.tableHeaderText, { flex: 1 }]}>Win %</Text>
-            </View>
-            {standings.map((player) => (
-              <View key={player.rank} style={styles.tableRow}>
-                <Text style={[styles.tableCellRank, { flex: 0.7 }]}>
-                  {player.rank <= 3 ? 
-                    (player.rank === 1 ? '🥇' : player.rank === 2 ? '🥈' : '🥉') 
-                    : player.rank}
+        ) : (
+          <>
+            <View style={styles.infoGrid}>
+              <View style={styles.infoCard}>
+                <Trophy color="#7C3AED" size={24} />
+                <Text style={styles.infoValue}>
+                  {season?.totalPlayers || 0}
                 </Text>
-                <Text style={[styles.tableCell, { flex: 2, fontWeight: '600' }]}>
-                  {player.name}
+                <Text style={styles.infoLabel}>Players</Text>
+              </View>
+              <View style={styles.infoCard}>
+                <Calendar color="#7C3AED" size={24} />
+                <Text style={styles.infoValue}>
+                  {season ? `Week ${season.currentWeek}` : 'N/A'}
                 </Text>
-                <Text style={[styles.tableCell, { flex: 1 }]}>
-                  {player.wins}-{player.losses}
-                </Text>
-                <Text style={[styles.tableCell, { flex: 1 }]}>
-                  {player.winRate}
+                <Text style={styles.infoLabel}>
+                  {season ? `of ${season.totalWeeks}` : ''}
                 </Text>
               </View>
-            ))}
-          </View>
-        </View>
+              <View style={styles.infoCard}>
+                <Users color="#7C3AED" size={24} />
+                <Text style={styles.infoValue}>
+                  {season?.totalMatches || 0}
+                </Text>
+                <Text style={styles.infoLabel}>Matches</Text>
+              </View>
+            </View>
+
+            {/* Standings */}
+            <View style={styles.card}>
+              <Text style={styles.cardTitle}>STANDINGS</Text>
+              {standings.length === 0 ? (
+                <Text style={styles.emptyText}>No standings available yet</Text>
+              ) : (
+                <View style={styles.standingsTable}>
+                  <View style={styles.tableHeader}>
+                    <Text style={[styles.tableHeaderText, { flex: 0.7 }]}>Rank</Text>
+                    <Text style={[styles.tableHeaderText, { flex: 2 }]}>Player</Text>
+                    <Text style={[styles.tableHeaderText, { flex: 1 }]}>W-L</Text>
+                    <Text style={[styles.tableHeaderText, { flex: 1 }]}>Win %</Text>
+                  </View>
+                  {standings.map((player) => (
+                    <View key={player.rank} style={styles.tableRow}>
+                      <Text style={[styles.tableCellRank, { flex: 0.7 }]}>
+                        {player.rank <= 3 ? 
+                          (player.rank === 1 ? '🥇' : player.rank === 2 ? '🥈' : '🥉') 
+                          : player.rank}
+                      </Text>
+                      <Text style={[styles.tableCell, { flex: 2, fontWeight: '600' }]}>
+                        {player.name}
+                      </Text>
+                      <Text style={[styles.tableCell, { flex: 1 }]}>
+                        {player.wins}-{player.losses}
+                      </Text>
+                      <Text style={[styles.tableCell, { flex: 1 }]}>
+                        {player.winRate}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </View>
+          </>
+        )}
 
         {/* Join League CTA */}
         <View style={styles.ctaCard}>
@@ -266,5 +298,16 @@ const styles = StyleSheet.create({
     color: '#7C3AED',
     fontSize: 16,
     fontWeight: '600',
+  },
+  loadingContainer: {
+    padding: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyText: {
+    fontSize: 14,
+    color: '#6B7280',
+    textAlign: 'center',
+    paddingVertical: 16,
   },
 });

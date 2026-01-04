@@ -1,38 +1,20 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useAllNews } from '../../hooks/useNews';
 
-interface NewsItem {
-  id: string;
-  title: string;
-  date: string;
-  author: string;
-  content: string;
-}
+// Helper function to format Firestore Timestamp to readable date string
+const formatDate = (timestamp: any): string => {
+  if (!timestamp) return '';
+  const date = timestamp.toDate();
+  return date.toLocaleDateString('en-US', { 
+    year: 'numeric', 
+    month: 'short', 
+    day: 'numeric' 
+  });
+};
 
 export default function NewsTab() {
-  const newsItems: NewsItem[] = [
-    {
-      id: '1',
-      title: 'Winter Tournament Registration Open!',
-      date: 'Dec 20, 2024',
-      author: 'UW Pool Club',
-      content: 'Register now for our annual Winter Tournament. Open to all skill levels with handicap adjustments. Prizes for top 3 finishers!',
-    },
-    {
-      id: '2',
-      title: 'New Practice Hours at HUB',
-      date: 'Dec 18, 2024',
-      author: 'UW Pool Club',
-      content: 'The HUB Games Area has extended hours for pool practice. Now open Monday-Friday 8am-10pm and weekends 10am-8pm.',
-    },
-    {
-      id: '3',
-      title: 'Congratulations to Our Fall Champions',
-      date: 'Dec 15, 2024',
-      author: 'UW Pool Club',
-      content: 'Huge congratulations to Friday Mufasa for winning the Fall 2024 league! Great season everyone!',
-    },
-  ];
+  const { news, loading, error, refetch } = useAllNews();
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -57,17 +39,46 @@ export default function NewsTab() {
           <Text style={styles.pageSubtitle}>Stay updated with the latest from the club</Text>
         </View>
 
-        {newsItems.map((item) => (
-          <TouchableOpacity key={item.id} style={styles.newsCard}>
-            <Text style={styles.newsTitle}>{item.title}</Text>
-            <View style={styles.newsMeta}>
-              <Text style={styles.newsAuthor}>{item.author}</Text>
-              <Text style={styles.newsSeparator}>•</Text>
-              <Text style={styles.newsDate}>{item.date}</Text>
-            </View>
-            <Text style={styles.newsContent}>{item.content}</Text>
-          </TouchableOpacity>
-        ))}
+        {loading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#7C3AED" />
+            <Text style={styles.loadingText}>Loading news...</Text>
+          </View>
+        ) : error ? (
+          <View style={styles.errorContainer}>
+            <Text style={styles.errorText}>Error loading news</Text>
+            <Text style={styles.errorMessage}>{error.message}</Text>
+            <TouchableOpacity style={styles.retryButton} onPress={refetch}>
+              <Text style={styles.retryButtonText}>Retry</Text>
+            </TouchableOpacity>
+          </View>
+        ) : news.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <Text style={styles.emptyText}>No news articles yet</Text>
+            <Text style={styles.emptySubtext}>Check back later for updates!</Text>
+          </View>
+        ) : (
+          news.map((item) => (
+            <TouchableOpacity key={item.id} style={styles.newsCard}>
+              <Text style={styles.newsTitle}>{item.title}</Text>
+              <View style={styles.newsMeta}>
+                <Text style={styles.newsAuthor}>{item.author}</Text>
+                <Text style={styles.newsSeparator}>•</Text>
+                <Text style={styles.newsDate}>{formatDate(item.publishedDate)}</Text>
+              </View>
+              <Text style={styles.newsContent}>{item.content}</Text>
+              {item.tags && item.tags.length > 0 && (
+                <View style={styles.tagsContainer}>
+                  {item.tags.map((tag, index) => (
+                    <View key={index} style={styles.tag}>
+                      <Text style={styles.tagText}>{tag}</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </TouchableOpacity>
+          ))
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -177,5 +188,78 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#4B5563',
     lineHeight: 20,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: '#6B7280',
+  },
+  errorContainer: {
+    backgroundColor: '#FEE2E2',
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+  },
+  errorText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#991B1B',
+    marginBottom: 4,
+  },
+  errorMessage: {
+    fontSize: 14,
+    color: '#B91C1C',
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  retryButton: {
+    backgroundColor: '#7C3AED',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: 'white',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  emptyContainer: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 32,
+    alignItems: 'center',
+  },
+  emptyText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#1F2937',
+    marginBottom: 4,
+  },
+  emptySubtext: {
+    fontSize: 14,
+    color: '#6B7280',
+  },
+  tagsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginTop: 12,
+    gap: 8,
+  },
+  tag: {
+    backgroundColor: '#EDE9FE',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  tagText: {
+    fontSize: 12,
+    color: '#7C3AED',
+    fontWeight: '500',
   },
 });
