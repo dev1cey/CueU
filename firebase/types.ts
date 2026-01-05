@@ -1,7 +1,7 @@
 import { Timestamp } from 'firebase/firestore';
 
 // User types
-export type SkillLevel = 'beginner' | 'intermediate' | 'advanced' | 'expert';
+export type SkillLevel = 1yt%;
 
 export interface User {
   // Basic Info
