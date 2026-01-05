@@ -46,6 +46,12 @@ export default function HomeTab() {
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   };
 
+  const formatEventTime = (timestamp: any) => {
+    if (!timestamp) return '';
+    const date = timestamp.toDate();
+    return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  };
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
@@ -179,7 +185,7 @@ export default function HomeTab() {
                     <View style={styles.eventDetails}>
                       <Calendar color="#6B7280" size={12} />
                       <Text style={styles.eventDetailText}>
-                        {formatEventDate(event.date)}, {event.time}
+                        {formatEventDate(event.time)}, {formatEventTime(event.time)}
                       </Text>
                     </View>
                     <View style={styles.eventDetails}>

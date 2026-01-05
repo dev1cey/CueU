@@ -1,7 +1,7 @@
 import { Timestamp } from 'firebase/firestore';
 
 // User types
-export type SkillLevel = 1yt%;
+export type SkillLevel = 'beginner' | 'intermediate' | 'advanced' | 'expert';
 
 export interface User {
   // Basic Info
@@ -82,4 +82,3 @@ export interface Season {
   totalMatches: number;
   createdAt: Timestamp;
 }
-

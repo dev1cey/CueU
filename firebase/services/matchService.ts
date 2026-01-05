@@ -11,8 +11,11 @@ import {
   Timestamp,
 } from 'firebase/firestore';
 import { db } from '../config';
-import { Match, MatchStatus } from '../types';
+import { Match } from '../types';
 import { updateUserStats } from './userService';
+
+// Local type for match status (not in Firebase schema)
+type MatchStatus = 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
 
 const MATCHES_COLLECTION = 'matches';
 
@@ -30,12 +33,13 @@ export const createMatch = async (matchData: {
     const matchesRef = collection(db, MATCHES_COLLECTION);
     const now = Timestamp.now();
 
-    const newMatch: Omit<Match, 'id'> = {
+    // Extended match data with extra fields not in the base Match type
+    const newMatch = {
       ...matchData,
       scheduledDate: matchData.scheduledDate
         ? Timestamp.fromDate(matchData.scheduledDate)
         : undefined,
-      status: 'scheduled',
+      status: 'scheduled' as MatchStatus,
       createdAt: now,
       updatedAt: now,
     };
@@ -67,7 +71,11 @@ export const getMatchById = async (matchId: string): Promise<Match | null> => {
 // Update match
 export const updateMatch = async (
   matchId: string,
-  updates: Partial<Omit<Match, 'id' | 'createdAt'>>
+  updates: Partial<Omit<Match, 'id' | 'createdAt'>> & { 
+    status?: MatchStatus;
+    scheduledDate?: Timestamp;
+    completedDate?: Timestamp;
+  }
 ): Promise<void> => {
   try {
     const matchRef = doc(db, MATCHES_COLLECTION, matchId);
@@ -183,12 +191,12 @@ export const getUpcomingMatches = async (userId?: string): Promise<Match[]> => {
         getDocs(q2)
       ]);
       
-      const matches: Match[] = [];
+      const matches: any[] = [];
       snapshot1.forEach(doc => {
-        matches.push({ id: doc.id, ...doc.data() } as Match);
+        matches.push({ id: doc.id, ...doc.data() });
       });
       snapshot2.forEach(doc => {
-        matches.push({ id: doc.id, ...doc.data() } as Match);
+        matches.push({ id: doc.id, ...doc.data() });
       });
       
       return matches.sort((a, b) => {
@@ -207,7 +215,7 @@ export const getUpcomingMatches = async (userId?: string): Promise<Match[]> => {
       return querySnapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
-      } as Match));
+      })) as Match[];
     }
   } catch (error) {
     console.error('Error getting upcoming matches:', error);

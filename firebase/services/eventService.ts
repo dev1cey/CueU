@@ -32,9 +32,17 @@ export const createEvent = async (eventData: {
     const eventsRef = collection(db, EVENTS_COLLECTION);
     const now = Timestamp.now();
 
-    const newEvent: Omit<Event, 'id'> = {
-      ...eventData,
-      date: Timestamp.fromDate(eventData.date),
+    // Store date and time separately, with extra updatedAt field
+    const newEvent = {
+      title: eventData.title,
+      description: eventData.description,
+      time: Timestamp.fromDate(eventData.date), // Store as Timestamp per original type
+      date: Timestamp.fromDate(eventData.date), // Also store separately for extended schema
+      timeString: eventData.time, // Store time string separately
+      location: eventData.location,
+      organizer: eventData.organizer,
+      type: eventData.type,
+      maxAttendees: eventData.maxAttendees,
       attendees: [],
       createdAt: now,
       updatedAt: now,
@@ -67,7 +75,11 @@ export const getEventById = async (eventId: string): Promise<Event | null> => {
 // Update event
 export const updateEvent = async (
   eventId: string,
-  updates: Partial<Omit<Event, 'id' | 'createdAt' | 'attendees'>>
+  updates: Partial<Omit<Event, 'id' | 'createdAt' | 'attendees'>> & {
+    updatedAt?: Timestamp;
+    date?: Timestamp;
+    timeString?: string;
+  }
 ): Promise<void> => {
   try {
     const eventRef = doc(db, EVENTS_COLLECTION, eventId);

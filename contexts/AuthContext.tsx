@@ -9,7 +9,7 @@ import {
 } from 'firebase/auth';
 import { auth } from '../firebase/config';
 import { User } from '../firebase/types';
-import { getUserById, getUserByEmail, createUser } from '../firebase/services';
+import { getUserById, getUserByEmail } from '../firebase/services';
 
 const USER_STORAGE_KEY = '@cueu_current_user_id';
 
