@@ -1,40 +1,112 @@
-import { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Alert } from 'react-native';
+import { useState, useEffect } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Alert, ActivityIndicator } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../contexts/AuthContext';
+import { signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
+import { auth, GOOGLE_OAUTH_IOS_CLIENT_ID } from '../firebase/config';
+import * as WebBrowser from 'expo-web-browser';
+import * as Google from 'expo-auth-session/providers/google';
+
+WebBrowser.maybeCompleteAuthSession();
 
 export default function AuthScreen() {
-  const [email, setEmail] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
-  const { login } = useAuth();
+  const { signInWithGoogle, checkUserExists, login } = useAuth();
 
-  const handleSSO = () => {
-    setIsLoading(true);
-    // Simulate UW SSO authentication
-    setTimeout(() => {
-      setIsLoading(false);
-      router.push('/profile-setup');
-    }, 1500);
-  };
+  // Set up Google OAuth for mobile using expo-auth-session
+  // Use the iOS Client ID with the native redirect URI format
+  // This bypasses the Expo proxy and works directly with Google's iOS Client
+  const redirectUri = 'com.googleusercontent.apps.361114924548-fmii3vq7m3jthnkea85ta6f55sfbuh6h:/oauth2redirect/google';
+  
+  const [request, response, promptAsync] = Google.useIdTokenAuthRequest({
+    clientId: GOOGLE_OAUTH_IOS_CLIENT_ID,
+    iosClientId: GOOGLE_OAUTH_IOS_CLIENT_ID,
+    redirectUri: redirectUri,
+  });
 
-  const handleEmailVerify = () => {
-    if (!email.endsWith('@uw.edu')) {
-      alert('Please use a valid @uw.edu email address');
-      return;
+  // Handle OAuth response from expo-auth-session
+  useEffect(() => {
+    if (response?.type === 'success') {
+      handleMobileGoogleSignIn(response.params.id_token);
     }
+  }, [response]);
 
-    setIsLoading(true);
-    // Simulate email verification
-    setTimeout(() => {
-      setIsLoading(false);
-      setTimeout(() => {
+  const handleMobileGoogleSignIn = async (idToken: string) => {
+    try {
+      setIsLoading(true);
+      const { isNewUser, email } = await signInWithGoogle(idToken);
+      
+      if (isNewUser) {
         router.push('/profile-setup');
-      }, 1000);
-    }, 1500);
+      } else {
+        const user = await checkUserExists(email);
+        if (user) {
+          await login(user.id);
+          router.replace('/(tabs)');
+        } else {
+          router.push('/profile-setup');
+        }
+      }
+    } catch (error: any) {
+      console.error('Error signing in with Google:', error);
+      Alert.alert(
+        'Sign In Error',
+        error.message || 'Failed to sign in with Google. Please try again.',
+        [{ text: 'OK' }]
+      );
+    } finally {
+      setIsLoading(false);
+    }
   };
+
+  const handleGoogleSignIn = async () => {
+    try {
+      setIsLoading(true);
+      
+      // For web platforms, we can use Firebase's popup
+      if (Platform.OS === 'web') {
+        const provider = new GoogleAuthProvider();
+        const result = await signInWithPopup(auth, provider);
+        const credential = GoogleAuthProvider.credentialFromResult(result);
+        
+        if (!credential?.idToken) {
+          throw new Error('Failed to get Google credentials');
+        }
+
+        const { isNewUser, email } = await signInWithGoogle(credential.idToken);
+        
+        if (isNewUser) {
+          // New user - go to profile setup
+          router.push('/profile-setup');
+        } else {
+          // Existing user - check if profile is complete and log in
+          const user = await checkUserExists(email);
+          if (user) {
+            await login(user.id);
+            router.replace('/(tabs)');
+          } else {
+            router.push('/profile-setup');
+          }
+        }
+      } else {
+        setIsLoading(false);
+        promptAsync();
+      }
+    } catch (error: any) {
+      console.error('Error signing in with Google:', error);
+      Alert.alert(
+        'Sign In Error',
+        error.message || 'Failed to sign in with Google. Please try again.',
+        [{ text: 'OK' }]
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
 
   const handleSkipAuth = async () => {
     // Use test-user-1 from seeded data
@@ -86,54 +158,29 @@ export default function AuthScreen() {
               <View style={styles.cardHeader}>
                 <Text style={styles.cardTitle}>Welcome to CueU</Text>
                 <Text style={styles.cardDescription}>
-                  Sign in with your UW credentials to join the pool club
+                  Sign in with your UW Google account to join the pool club
                 </Text>
               </View>
 
               <View style={styles.cardContent}>
                 <TouchableOpacity
-                  style={[styles.button, styles.primaryButton, isLoading && styles.buttonDisabled]}
-                  onPress={handleSSO}
+                  style={[styles.button, styles.googleButton, isLoading && styles.buttonDisabled]}
+                  onPress={handleGoogleSignIn}
                   disabled={isLoading}
                 >
-                  <Text style={styles.buttonText}>🛡️ Sign in with UW SSO</Text>
-                </TouchableOpacity>
-
-                <View style={styles.divider}>
-                  <View style={styles.dividerLine} />
-                  <Text style={styles.dividerText}>OR</Text>
-                  <View style={styles.dividerLine} />
-                </View>
-
-                <View style={styles.inputContainer}>
-                  <Text style={styles.label}>UW Email Address</Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="husky@uw.edu"
-                    placeholderTextColor="#9CA3AF"
-                    value={email}
-                    onChangeText={setEmail}
-                    keyboardType="email-address"
-                    autoCapitalize="none"
-                    editable={!isLoading}
-                  />
-                  <Text style={styles.helperText}>
-                    A verification link will be sent to your email
-                  </Text>
-                </View>
-
-                <TouchableOpacity
-                  style={[styles.button, styles.primaryButton, (isLoading || !email) && styles.buttonDisabled]}
-                  onPress={handleEmailVerify}
-                  disabled={isLoading || !email}
-                >
-                  <Text style={styles.buttonText}>
-                    {isLoading ? 'Sending...' : 'Send Verification Link'}
-                  </Text>
+                  {isLoading ? (
+                    <ActivityIndicator color="white" />
+                  ) : (
+                    <>
+                      <Text style={styles.googleIcon}>G</Text>
+                      <Text style={styles.buttonText}>Sign in with Google</Text>
+                    </>
+                  )}
                 </TouchableOpacity>
 
                 <View style={styles.badge}>
-                  <Text style={styles.badgeText}>UW Students & Staff Only</Text>
+                  <Text style={styles.badgeText}>✓ UW Students & Staff Only</Text>
+                  <Text style={styles.badgeSubtext}>Must use @uw.edu email address</Text>
                 </View>
               </View>
             </View>
@@ -153,13 +200,13 @@ export default function AuthScreen() {
                   {isLoading ? 'Logging in as test-user-1...' : 'Skip Login (Testing Only)'}
                 </Text>
               </TouchableOpacity>
-              <Text style={styles.skipText}>
-                For development and testing purposes
-              </Text>
-            </View>
-          </ScrollView>
-        </KeyboardAvoidingView>
-      </SafeAreaView>
+            <Text style={styles.skipText}>
+              For development and testing purposes
+            </Text>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
     </LinearGradient>
   );
 }
@@ -252,9 +299,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     borderRadius: 8,
     alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
   },
-  primaryButton: {
-    backgroundColor: '#7C3AED',
+  googleButton: {
+    backgroundColor: '#4285F4',
+    gap: 12,
+  },
+  googleIcon: {
+    backgroundColor: 'white',
+    color: '#4285F4',
+    fontWeight: 'bold',
+    fontSize: 18,
+    width: 32,
+    height: 32,
+    textAlign: 'center',
+    lineHeight: 32,
+    borderRadius: 4,
   },
   buttonText: {
     color: 'white',
@@ -263,43 +324,6 @@ const styles = StyleSheet.create({
   },
   buttonDisabled: {
     opacity: 0.5,
-  },
-  divider: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginVertical: 8,
-  },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: '#E5E7EB',
-  },
-  dividerText: {
-    paddingHorizontal: 8,
-    fontSize: 12,
-    color: '#9CA3AF',
-    textTransform: 'uppercase',
-  },
-  inputContainer: {
-    gap: 8,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#374151',
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    fontSize: 16,
-    color: '#1F2937',
-  },
-  helperText: {
-    fontSize: 12,
-    color: '#6B7280',
   },
   badge: {
     backgroundColor: '#F3F4F6',
@@ -313,6 +337,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
     color: '#4B5563',
+    marginBottom: 4,
+  },
+  badgeSubtext: {
+    fontSize: 12,
+    color: '#6B7280',
   },
   footer: {
     textAlign: 'center',

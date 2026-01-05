@@ -11,7 +11,8 @@ import {
   limit,
   Timestamp,
 } from 'firebase/firestore';
-import { db } from '../config';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { db, storage } from '../config';
 import { User, SkillLevel } from '../types';
 
 const USERS_COLLECTION = 'users';
@@ -22,17 +23,30 @@ export const createUser = async (
   userData: {
     email: string;
     name: string;
-    department: string;
+    phone?: string;
+    wechat?: string;
+    department?: string;
     skillLevel: SkillLevel;
-    bio: string;
+    bio?: string;
+    profileImageUrl?: string;
   }
 ): Promise<void> => {
   try {
     const userRef = doc(db, USERS_COLLECTION, userId);
     const now = Timestamp.now();
     
+    // Map skill level to number
+    const skillLevelMap: Record<SkillLevel, number> = {
+      'beginner': 1,
+      'intermediate': 2,
+      'advanced': 3,
+      'expert': 4,
+    };
+    
     const newUser: Omit<User, 'id'> = {
       ...userData,
+      bio: userData.bio || '',
+      skillLevelNum: skillLevelMap[userData.skillLevel],
       wins: 0,
       losses: 0,
       matchesPlayed: 0,
@@ -59,6 +73,41 @@ export const getUserById = async (userId: string): Promise<User | null> => {
     return null;
   } catch (error) {
     console.error('Error getting user:', error);
+    throw error;
+  }
+};
+
+// Get user by email
+export const getUserByEmail = async (email: string): Promise<User | null> => {
+  try {
+    const usersRef = collection(db, USERS_COLLECTION);
+    const q = query(usersRef, where('email', '==', email), limit(1));
+    const querySnapshot = await getDocs(q);
+    
+    if (!querySnapshot.empty) {
+      const doc = querySnapshot.docs[0];
+      return { id: doc.id, ...doc.data() } as User;
+    }
+    return null;
+  } catch (error) {
+    console.error('Error getting user by email:', error);
+    throw error;
+  }
+};
+
+// Upload profile image
+export const uploadProfileImage = async (userId: string, imageUri: string): Promise<string> => {
+  try {
+    const response = await fetch(imageUri);
+    const blob = await response.blob();
+    
+    const storageRef = ref(storage, `profile-images/${userId}`);
+    await uploadBytes(storageRef, blob);
+    
+    const downloadURL = await getDownloadURL(storageRef);
+    return downloadURL;
+  } catch (error) {
+    console.error('Error uploading profile image:', error);
     throw error;
   }
 };

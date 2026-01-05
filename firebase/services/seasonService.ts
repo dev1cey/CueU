@@ -27,16 +27,18 @@ export const createSeason = async (seasonData: {
     const seasonsRef = collection(db, SEASONS_COLLECTION);
     const now = Timestamp.now();
 
-    const newSeason: Omit<Season, 'id'> = {
-      ...seasonData,
+    // Extended season data with updatedAt field
+    const newSeason = {
+      name: seasonData.name,
       startDate: Timestamp.fromDate(seasonData.startDate),
       endDate: Timestamp.fromDate(seasonData.endDate),
-      status: 'upcoming',
+      totalWeeks: seasonData.totalWeeks,
+      status: 'upcoming' as SeasonStatus,
       currentWeek: 0,
       totalPlayers: 0,
       totalMatches: 0,
       createdAt: now,
-      updatedAt: now,
+      updatedAt: now, // Extra field
     };
 
     const docRef = await addDoc(seasonsRef, newSeason);
@@ -66,7 +68,9 @@ export const getSeasonById = async (seasonId: string): Promise<Season | null> =>
 // Update season
 export const updateSeason = async (
   seasonId: string,
-  updates: Partial<Omit<Season, 'id' | 'createdAt'>>
+  updates: Partial<Omit<Season, 'id' | 'createdAt'>> & {
+    updatedAt?: Timestamp;
+  }
 ): Promise<void> => {
   try {
     const seasonRef = doc(db, SEASONS_COLLECTION, seasonId);

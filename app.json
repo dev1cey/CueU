@@ -2,6 +2,7 @@
   "expo": {
     "name": "CueU",
     "slug": "cueu",
+    "owner": "anonymous",
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
@@ -15,6 +16,11 @@
       "buildNumber": "1.0.0",
       "infoPlist": {
         "UILaunchStoryboardName": "SplashScreen"
+      },
+      "config": {
+        "googleSignIn": {
+          "reservedClientId": "com.googleusercontent.apps.361114924548-fmii3vq7m3jthnkea85ta6f55sfbuh6h"
+        }
       }
     },
     "android": {

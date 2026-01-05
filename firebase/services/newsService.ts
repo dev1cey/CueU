@@ -29,11 +29,17 @@ export const createNews = async (newsData: {
     const newsRef = collection(db, NEWS_COLLECTION);
     const now = Timestamp.now();
 
-    const newNews: Omit<News, 'id'> = {
-      ...newsData,
+    // Extended news data with extra fields not in base News type
+    const newNews = {
+      title: newsData.title,
+      content: newsData.content,
+      author: newsData.author,
+      authorId: newsData.authorId, // Extra field
+      imageUrl: newsData.imageUrl, // Extra field
+      tags: newsData.tags,
       publishedDate: now,
       createdAt: now,
-      updatedAt: now,
+      updatedAt: now, // Extra field
     };
 
     const docRef = await addDoc(newsRef, newNews);
@@ -63,7 +69,11 @@ export const getNewsById = async (newsId: string): Promise<News | null> => {
 // Update news article
 export const updateNews = async (
   newsId: string,
-  updates: Partial<Omit<News, 'id' | 'createdAt' | 'publishedDate'>>
+  updates: Partial<Omit<News, 'id' | 'createdAt' | 'publishedDate'>> & {
+    authorId?: string;
+    imageUrl?: string;
+    updatedAt?: Timestamp;
+  }
 ): Promise<void> => {
   try {
     const newsRef = doc(db, NEWS_COLLECTION, newsId);
