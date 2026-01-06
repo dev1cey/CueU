@@ -20,6 +20,9 @@ export default function HomeTab() {
   const { season, loading: seasonLoading } = useActiveSeason();
   const { currentUser } = useAuth();
 
+  // Fetch all players to calculate rank
+  const { players: allPlayers, loading: allPlayersLoading } = useTopPlayers(100); // Get more players to calculate rank
+
   // Calculate win rate (always compute from wins/matches)
   const calculateWinRate = (user: typeof currentUser) => {
     if (!user) return 0;
@@ -27,11 +30,18 @@ export default function HomeTab() {
     return (user.wins / user.matchesPlayed) * 100;
   };
 
+  // Calculate current user's rank
+  const calculateUserRank = () => {
+    if (!currentUser || allPlayersLoading) return '-';
+    const userIndex = allPlayers.findIndex(player => player.id === currentUser.id);
+    return userIndex !== -1 ? `${userIndex + 1}` : '-';
+  };
+
   // User stats based on logged in user
   const quickStats: QuickStat[] = currentUser ? [
     { label: 'Skill Level', value: currentUser.skillLevel, subtext: currentUser.skillLevel.charAt(0).toUpperCase() + currentUser.skillLevel.slice(1) },
     { label: 'Win Rate', value: `${calculateWinRate(currentUser).toFixed(0)}%`, subtext: `${currentUser.wins}-${currentUser.losses} record` },
-    { label: 'Rank', value: '-', subtext: 'of players' },
+    { label: 'Rank', value: calculateUserRank(), subtext: `of ${allPlayers.length} players` },
     { label: 'Matches', value: `${currentUser.matchesPlayed}`, subtext: 'total played' }
   ] : [
     { label: 'Skill Level', value: '-', subtext: 'Not logged in' },
@@ -53,7 +63,7 @@ export default function HomeTab() {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={[]}>
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerContent}>
@@ -61,13 +71,13 @@ export default function HomeTab() {
             <View style={styles.logo}>
               <View style={styles.logoInner} />
             </View>
-            <View>
+            <View style={styles.titleContainer}>
               <Text style={styles.headerTitle}>CueU</Text>
-              <Text style={styles.headerSubtitle}>UW Pool Club</Text>
+              <Text style={styles.headerSubtitle}> - UW Pool Club</Text>
             </View>
           </View>
           <TouchableOpacity style={styles.notificationButton}>
-            <Bell color="white" size={24} />
+            <Bell color="#7C3AED" size={24} />
           </TouchableOpacity>
         </View>
       </View>
@@ -214,9 +224,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#F9FAFB',
   },
   header: {
-    backgroundColor: '#7C3AED',
+    backgroundColor: 'white',
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(252, 211, 77, 0.3)',
+    borderBottomColor: '#E5E7EB',
+    paddingTop: 50,
   },
   headerContent: {
     flexDirection: 'row',
@@ -244,14 +255,19 @@ const styles = StyleSheet.create({
     backgroundColor: '#7C3AED',
     borderRadius: 12,
   },
+  titleContainer: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+  },
   headerTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: 'white',
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#7C3AED',
   },
   headerSubtitle: {
-    fontSize: 12,
-    color: '#FCD34D',
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#7C3AED',
   },
   notificationButton: {
     padding: 8,
@@ -364,7 +380,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   statValue: {
-    fontSize: 28,
+    fontSize: 18,
     fontWeight: 'bold',
     color: '#7C3AED',
     marginBottom: 4,

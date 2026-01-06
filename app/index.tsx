@@ -156,9 +156,9 @@ export default function AuthScreen() {
             {/* Auth Card */}
             <View style={styles.card}>
               <View style={styles.cardHeader}>
-                <Text style={styles.cardTitle}>Welcome to CueU</Text>
+                <Text style={styles.cardTitle}>Welcome Back</Text>
                 <Text style={styles.cardDescription}>
-                  Sign in with your UW Google account to join the pool club
+                  Sign in with your UW account to continue
                 </Text>
               </View>
 
@@ -178,16 +178,11 @@ export default function AuthScreen() {
                   )}
                 </TouchableOpacity>
 
-                <View style={styles.badge}>
-                  <Text style={styles.badgeText}>✓ UW Students & Staff Only</Text>
-                  <Text style={styles.badgeSubtext}>Must use @uw.edu email address</Text>
-                </View>
+                <Text style={styles.infoText}>
+                  UW students and staff only (@uw.edu)
+                </Text>
               </View>
             </View>
-
-            <Text style={styles.footer}>
-              By signing in, you agree to the UW Pool Club terms and conditions
-            </Text>
 
             {/* Skip Login for Testing */}
             <View style={styles.skipContainer}>
@@ -197,16 +192,16 @@ export default function AuthScreen() {
                 disabled={isLoading}
               >
                 <Text style={styles.outlineButtonText}>
-                  {isLoading ? 'Logging in as test-user-1...' : 'Skip Login (Testing Only)'}
+                  {isLoading ? 'Logging in...' : 'Skip Login (Testing)'}
                 </Text>
               </TouchableOpacity>
-            <Text style={styles.skipText}>
-              For development and testing purposes
-            </Text>
-          </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+              <Text style={styles.skipText}>
+                For development and testing purposes
+              </Text>
+            </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
     </LinearGradient>
   );
 }
@@ -223,73 +218,80 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
-    padding: 20,
+    padding: 24,
     justifyContent: 'center',
   },
   header: {
     alignItems: 'center',
-    marginBottom: 32,
+    marginBottom: 48,
   },
   logoOuter: {
-    width: 80,
-    height: 80,
+    width: 100,
+    height: 100,
     backgroundColor: 'white',
-    borderRadius: 40,
+    borderRadius: 50,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 16,
+    marginBottom: 24,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
-    shadowRadius: 8,
+    shadowRadius: 12,
     elevation: 8,
   },
   logoMiddle: {
-    width: 48,
-    height: 48,
+    width: 60,
+    height: 60,
     backgroundColor: '#7C3AED',
-    borderRadius: 24,
+    borderRadius: 30,
     alignItems: 'center',
     justifyContent: 'center',
   },
   logoInner: {
-    width: 32,
-    height: 32,
+    width: 40,
+    height: 40,
     backgroundColor: '#FCD34D',
-    borderRadius: 16,
+    borderRadius: 20,
   },
   title: {
-    fontSize: 32,
+    fontSize: 48,
     fontWeight: 'bold',
     color: 'white',
     marginBottom: 8,
+    letterSpacing: -1,
   },
   subtitle: {
     fontSize: 16,
-    color: '#FCD34D',
+    color: 'rgba(255, 255, 255, 0.9)',
+    fontWeight: '500',
   },
   card: {
     backgroundColor: 'white',
-    borderRadius: 12,
-    padding: 20,
+    borderRadius: 16,
+    padding: 32,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 5,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 16,
+    elevation: 8,
+    marginHorizontal: 8,
   },
   cardHeader: {
-    marginBottom: 20,
+    marginBottom: 32,
+    alignItems: 'center',
   },
   cardTitle: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: 'bold',
     color: '#1F2937',
     marginBottom: 8,
+    textAlign: 'center',
   },
   cardDescription: {
-    fontSize: 14,
+    fontSize: 15,
     color: '#6B7280',
+    textAlign: 'center',
+    lineHeight: 22,
   },
   cardContent: {
     gap: 16,
@@ -297,78 +299,69 @@ const styles = StyleSheet.create({
   button: {
     paddingVertical: 16,
     paddingHorizontal: 24,
-    borderRadius: 8,
+    borderRadius: 12,
     alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   googleButton: {
-    backgroundColor: '#4285F4',
+    backgroundColor: '#7C3AED',
     gap: 12,
   },
   googleIcon: {
     backgroundColor: 'white',
-    color: '#4285F4',
+    color: '#7C3AED',
     fontWeight: 'bold',
-    fontSize: 18,
-    width: 32,
-    height: 32,
+    fontSize: 20,
+    width: 36,
+    height: 36,
     textAlign: 'center',
-    lineHeight: 32,
-    borderRadius: 4,
+    lineHeight: 36,
+    borderRadius: 6,
   },
   buttonText: {
     color: 'white',
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: '600',
   },
   buttonDisabled: {
-    opacity: 0.5,
+    opacity: 0.6,
   },
-  badge: {
-    backgroundColor: '#F3F4F6',
-    borderRadius: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  badgeText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#4B5563',
-    marginBottom: 4,
-  },
-  badgeSubtext: {
-    fontSize: 12,
-    color: '#6B7280',
-  },
-  footer: {
+  infoText: {
+    fontSize: 13,
+    color: '#9CA3AF',
     textAlign: 'center',
-    fontSize: 12,
-    color: 'rgba(255, 255, 255, 0.7)',
-    marginTop: 24,
+    marginTop: 4,
   },
   skipContainer: {
-    marginTop: 24,
+    marginTop: 32,
     paddingTop: 24,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 255, 255, 0.1)',
+    borderTopColor: 'rgba(255, 255, 255, 0.15)',
+    alignItems: 'center',
   },
   outlineButton: {
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+    shadowOpacity: 0,
+    elevation: 0,
   },
   outlineButtonText: {
     color: 'white',
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
   },
   skipText: {
     textAlign: 'center',
     fontSize: 12,
-    color: 'rgba(255, 255, 255, 0.5)',
-    marginTop: 8,
+    color: 'rgba(255, 255, 255, 0.6)',
+    marginTop: 12,
+    fontStyle: 'italic',
   },
 });

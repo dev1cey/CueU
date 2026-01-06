@@ -1,6 +1,8 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Modal } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAllNews } from '../../hooks/useNews';
+import { News } from '../../firebase/types';
+import { useState } from 'react';
 
 // Helper function to format Firestore Timestamp to readable date string
 const formatDate = (timestamp: any): string => {
@@ -15,9 +17,38 @@ const formatDate = (timestamp: any): string => {
 
 export default function NewsTab() {
   const { news, loading, error, refetch } = useAllNews();
+  const [selectedNews, setSelectedNews] = useState<News | null>(null);
+  const [modalVisible, setModalVisible] = useState(false);
+  const insets = useSafeAreaInsets();
+  
+  // #region agent log
+  fetch('http://127.0.0.1:7243/ingest/5fc0dea6-b80b-4340-9629-d3f8909bf767',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'news.tsx:18',message:'Component rendered with insets',data:{insetsTop:insets.top,insetsBottom:insets.bottom,modalVisible:modalVisible},timestamp:Date.now(),sessionId:'debug-session',runId:'initial',hypothesisId:'A,B,E'})}).catch(()=>{});
+  // #endregion
+
+  const handleNewsPress = (newsItem: News) => {
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/5fc0dea6-b80b-4340-9629-d3f8909bf767',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'news.tsx:23',message:'handleNewsPress called',data:{newsId:newsItem.id,newsTitle:newsItem.title},timestamp:Date.now(),sessionId:'debug-session',runId:'initial',hypothesisId:'C'})}).catch(()=>{});
+    // #endregion
+    setSelectedNews(newsItem);
+    setModalVisible(true);
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/5fc0dea6-b80b-4340-9629-d3f8909bf767',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'news.tsx:26',message:'Modal state updated',data:{modalVisible:true,hasSelectedNews:!!newsItem},timestamp:Date.now(),sessionId:'debug-session',runId:'initial',hypothesisId:'C'})}).catch(()=>{});
+    // #endregion
+  };
+
+  const closeModal = () => {
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/5fc0dea6-b80b-4340-9629-d3f8909bf767',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'news.tsx:28',message:'closeModal called',data:{currentModalVisible:modalVisible,currentSelectedNews:selectedNews?.id},timestamp:Date.now(),sessionId:'debug-session',runId:'initial',hypothesisId:'C'})}).catch(()=>{});
+    // #endregion
+    setModalVisible(false);
+    setSelectedNews(null);
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/5fc0dea6-b80b-4340-9629-d3f8909bf767',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'news.tsx:31',message:'Modal closed state set',data:{modalVisible:false,selectedNews:null},timestamp:Date.now(),sessionId:'debug-session',runId:'initial',hypothesisId:'C'})}).catch(()=>{});
+    // #endregion
+  };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={[]}>
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerContent}>
@@ -25,9 +56,9 @@ export default function NewsTab() {
             <View style={styles.logo}>
               <View style={styles.logoInner} />
             </View>
-            <View>
+            <View style={styles.titleContainer}>
               <Text style={styles.headerTitle}>CueU</Text>
-              <Text style={styles.headerSubtitle}>UW Pool Club</Text>
+              <Text style={styles.headerSubtitle}> - UW Pool Club</Text>
             </View>
           </View>
         </View>
@@ -59,14 +90,20 @@ export default function NewsTab() {
           </View>
         ) : (
           news.map((item) => (
-            <TouchableOpacity key={item.id} style={styles.newsCard}>
+            <TouchableOpacity 
+              key={item.id} 
+              style={styles.newsCard}
+              onPress={() => handleNewsPress(item)}
+            >
               <Text style={styles.newsTitle}>{item.title}</Text>
               <View style={styles.newsMeta}>
                 <Text style={styles.newsAuthor}>{item.author}</Text>
                 <Text style={styles.newsSeparator}>•</Text>
                 <Text style={styles.newsDate}>{formatDate(item.publishedDate)}</Text>
               </View>
-              <Text style={styles.newsContent}>{item.content}</Text>
+              <Text style={styles.newsContent} numberOfLines={3}>
+                {item.content}
+              </Text>
               {item.tags && item.tags.length > 0 && (
                 <View style={styles.tagsContainer}>
                   {item.tags.map((tag, index) => (
@@ -80,6 +117,53 @@ export default function NewsTab() {
           ))
         )}
       </ScrollView>
+
+      {/* News Detail Modal */}
+      <Modal
+        animationType="slide"
+        transparent={false}
+        visible={modalVisible}
+        onRequestClose={closeModal}
+      >
+        <View style={styles.modalContainer}>
+          <View style={[styles.modalHeader, { paddingTop: insets.top + 12 }]}>
+            <TouchableOpacity 
+              style={styles.backButton} 
+              onPress={() => {
+                // #region agent log
+                fetch('http://127.0.0.1:7243/ingest/5fc0dea6-b80b-4340-9629-d3f8909bf767',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'news.tsx:113',message:'Back button pressed',data:{timestamp:Date.now()},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'D'})}).catch(()=>{});
+                // #endregion
+                closeModal();
+              }}
+              hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
+            >
+              <Text style={styles.backButtonText}>← Back</Text>
+            </TouchableOpacity>
+          </View>
+          <ScrollView style={styles.modalScrollView} contentContainerStyle={styles.modalScrollContent}>
+            {selectedNews && (
+              <>
+                <Text style={styles.modalTitle}>{selectedNews.title}</Text>
+                <View style={styles.modalMeta}>
+                  <Text style={styles.modalAuthor}>{selectedNews.author}</Text>
+                  <Text style={styles.modalSeparator}>•</Text>
+                  <Text style={styles.modalDate}>{formatDate(selectedNews.publishedDate)}</Text>
+                </View>
+                {selectedNews.tags && selectedNews.tags.length > 0 && (
+                  <View style={styles.modalTagsContainer}>
+                    {selectedNews.tags.map((tag, index) => (
+                      <View key={index} style={styles.modalTag}>
+                        <Text style={styles.modalTagText}>{tag}</Text>
+                      </View>
+                    ))}
+                  </View>
+                )}
+                <Text style={styles.modalContentText}>{selectedNews.content}</Text>
+              </>
+            )}
+          </ScrollView>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -90,9 +174,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#F9FAFB',
   },
   header: {
-    backgroundColor: '#7C3AED',
+    backgroundColor: 'white',
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(252, 211, 77, 0.3)',
+    borderBottomColor: '#E5E7EB',
+    paddingTop: 50,
   },
   headerContent: {
     flexDirection: 'row',
@@ -120,14 +205,19 @@ const styles = StyleSheet.create({
     backgroundColor: '#7C3AED',
     borderRadius: 12,
   },
+  titleContainer: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+  },
   headerTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: 'white',
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#7C3AED',
   },
   headerSubtitle: {
-    fontSize: 12,
-    color: '#FCD34D',
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#7C3AED',
   },
   scrollView: {
     flex: 1,
@@ -261,5 +351,78 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#7C3AED',
     fontWeight: '500',
+  },
+  modalContainer: {
+    flex: 1,
+    backgroundColor: '#F9FAFB',
+  },
+  modalHeader: {
+    backgroundColor: 'white',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  backButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  backButtonText: {
+    color: '#7C3AED',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  modalScrollView: {
+    flex: 1,
+  },
+  modalScrollContent: {
+    padding: 20,
+  },
+  modalTitle: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#1F2937',
+    marginBottom: 12,
+  },
+  modalMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  modalAuthor: {
+    fontSize: 14,
+    color: '#7C3AED',
+    fontWeight: '600',
+  },
+  modalSeparator: {
+    fontSize: 14,
+    color: '#9CA3AF',
+    marginHorizontal: 8,
+  },
+  modalDate: {
+    fontSize: 14,
+    color: '#6B7280',
+  },
+  modalTagsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginBottom: 20,
+    gap: 8,
+  },
+  modalTag: {
+    backgroundColor: '#EDE9FE',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+  },
+  modalTagText: {
+    fontSize: 12,
+    color: '#7C3AED',
+    fontWeight: '500',
+  },
+  modalContentText: {
+    fontSize: 16,
+    color: '#4B5563',
+    lineHeight: 24,
   },
 });
