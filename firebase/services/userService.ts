@@ -174,6 +174,45 @@ export const getTopPlayers = async (limitCount: number = 10): Promise<User[]> =>
   }
 };
 
+// Get top players by player IDs (for season-specific rankings)
+export const getTopPlayersByIds = async (playerIds: string[], limitCount?: number): Promise<User[]> => {
+  try {
+    if (playerIds.length === 0) return [];
+    
+    // Fetch all specified players
+    const playerPromises = playerIds.map(id => getUserById(id));
+    const players = await Promise.all(playerPromises);
+    
+    // Filter out null values but INCLUDE users without matches
+    const validPlayers = players
+      .filter((player): player is User => player !== null)
+      .map(user => {
+        // Calculate win rate for sorting (0% for users with no matches)
+        const calculatedWinRate = user.matchesPlayed > 0 
+          ? (user.wins / user.matchesPlayed) * 100 
+          : 0;
+        return { user, winRate: calculatedWinRate };
+      })
+      .sort((a, b) => {
+        // Players with matches come before players without matches
+        if (a.user.matchesPlayed === 0 && b.user.matchesPlayed > 0) return 1;
+        if (a.user.matchesPlayed > 0 && b.user.matchesPlayed === 0) return -1;
+        // Otherwise sort by win rate
+        return b.winRate - a.winRate;
+      });
+    
+    // Apply limit if specified
+    const rankedPlayers = limitCount 
+      ? validPlayers.slice(0, limitCount)
+      : validPlayers;
+    
+    return rankedPlayers.map(item => item.user);
+  } catch (error) {
+    console.error('Error getting top players by IDs:', error);
+    throw error;
+  }
+};
+
 // Update user stats after a match
 export const updateUserStats = async (
   userId: string,

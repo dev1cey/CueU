@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { User } from '../firebase/types';
-import { getUserById, getTopPlayers, getAllUsers } from '../firebase/services';
+import { getUserById, getTopPlayers, getAllUsers, getTopPlayersByIds } from '../firebase/services';
 
 // Hook to get a user by ID
 export const useUser = (userId: string | null) => {
@@ -109,5 +109,52 @@ export const useAllUsers = () => {
   };
 
   return { users, loading, error, refetch };
+};
+
+// Hook to get top players by player IDs (for season-specific rankings)
+export const useSeasonTopPlayers = (playerIds: string[] | null, limit?: number) => {
+  const [players, setPlayers] = useState<User[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
+
+  useEffect(() => {
+    if (!playerIds || playerIds.length === 0) {
+      setPlayers([]);
+      setLoading(false);
+      return;
+    }
+
+    const fetchPlayers = async () => {
+      try {
+        setLoading(true);
+        const playersData = await getTopPlayersByIds(playerIds, limit);
+        setPlayers(playersData);
+        setError(null);
+      } catch (err) {
+        setError(err as Error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchPlayers();
+  }, [playerIds, limit]);
+
+  const refetch = async () => {
+    if (!playerIds || playerIds.length === 0) return;
+    
+    try {
+      setLoading(true);
+      const playersData = await getTopPlayersByIds(playerIds, limit);
+      setPlayers(playersData);
+      setError(null);
+    } catch (err) {
+      setError(err as Error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return { players, loading, error, refetch };
 };
 

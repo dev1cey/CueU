@@ -2,7 +2,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Calendar, MapPin, Trophy, Bell, ChevronRight } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useTopPlayers } from '../../hooks/useUsers';
+import { useSeasonTopPlayers } from '../../hooks/useUsers';
 import { useUpcomingEvents } from '../../hooks/useEvents';
 import { useActiveSeason } from '../../hooks/useSeasons';
 import { useAuth } from '../../contexts/AuthContext';
@@ -15,13 +15,13 @@ interface QuickStat {
 
 export default function HomeTab() {
   // Fetch data from Firebase
-  const { players: topPlayers, loading: playersLoading } = useTopPlayers(3);
-  const { events, loading: eventsLoading } = useUpcomingEvents();
   const { season, loading: seasonLoading } = useActiveSeason();
+  const { players: topPlayers, loading: playersLoading } = useSeasonTopPlayers(season?.playerIds || null, 3);
+  const { events, loading: eventsLoading } = useUpcomingEvents();
   const { currentUser } = useAuth();
 
-  // Fetch all players to calculate rank
-  const { players: allPlayers, loading: allPlayersLoading } = useTopPlayers(100); // Get more players to calculate rank
+  // Fetch all season players to calculate rank
+  const { players: allPlayers, loading: allPlayersLoading } = useSeasonTopPlayers(season?.playerIds || null);
 
   // Calculate win rate (always compute from wins/matches)
   const calculateWinRate = (user: typeof currentUser) => {
@@ -41,7 +41,7 @@ export default function HomeTab() {
   const quickStats: QuickStat[] = currentUser ? [
     { label: 'Skill Level', value: currentUser.skillLevel, subtext: currentUser.skillLevel.charAt(0).toUpperCase() + currentUser.skillLevel.slice(1) },
     { label: 'Win Rate', value: `${calculateWinRate(currentUser).toFixed(0)}%`, subtext: `${currentUser.wins}-${currentUser.losses} record` },
-    { label: 'Rank', value: calculateUserRank(), subtext: `of ${allPlayers.length} players` },
+    { label: 'Rank', value: calculateUserRank(), subtext: `of ${season?.playerIds.length || 0} players` },
     { label: 'Matches', value: `${currentUser.matchesPlayed}`, subtext: 'total played' }
   ] : [
     { label: 'Skill Level', value: '-', subtext: 'Not logged in' },
@@ -109,7 +109,7 @@ export default function HomeTab() {
           <View style={styles.statsGrid}>
             {quickStats.map((stat, idx) => (
               <View key={idx} style={styles.statCard}>
-                <Text style={styles.statValue}>{stat.value}</Text>
+                <Text style={stat.label === 'Skill Level' ? styles.statValueSmall : styles.statValue}>{stat.value}</Text>
                 <Text style={styles.statLabel}>{stat.label}</Text>
                 {stat.subtext && (
                   <Text style={styles.statSubtext}>{stat.subtext}</Text>
@@ -128,10 +128,6 @@ export default function HomeTab() {
                 {seasonLoading ? 'Loading...' : season ? season.name : 'Current Season'}
               </Text>
             </View>
-            <TouchableOpacity style={styles.viewAllButton}>
-              <Text style={styles.viewAllText}>View All</Text>
-              <ChevronRight color="#7C3AED" size={16} />
-            </TouchableOpacity>
           </View>
           
           {playersLoading ? (
@@ -142,7 +138,7 @@ export default function HomeTab() {
           ) : topPlayers.length > 0 ? (
             <View style={styles.rankingsList}>
               {topPlayers.map((player, index) => (
-                <TouchableOpacity key={player.id} style={styles.rankingItem}>
+                <View key={player.id} style={styles.rankingItem}>
                   <Text style={styles.rankingEmoji}>
                     {index === 0 && '🥇'}
                     {index === 1 && '🥈'}
@@ -156,8 +152,7 @@ export default function HomeTab() {
                       <Text style={styles.losses}>{player.losses}</Text>
                     </View>
                   </View>
-                  <ChevronRight color="#9CA3AF" size={16} />
-                </TouchableOpacity>
+                </View>
               ))}
             </View>
           ) : (
@@ -381,6 +376,12 @@ const styles = StyleSheet.create({
   },
   statValue: {
     fontSize: 18,
+    fontWeight: 'bold',
+    color: '#7C3AED',
+    marginBottom: 4,
+  },
+  statValueSmall: {
+    fontSize: 14,
     fontWeight: 'bold',
     color: '#7C3AED',
     marginBottom: 4,

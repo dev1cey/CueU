@@ -81,7 +81,6 @@ export interface Season {
   status: SeasonStatus;
   currentWeek: number;
   totalWeeks: number;
-  totalPlayers: number;
   totalMatches: number;
   playerIds: string[]; // Array of user IDs participating in the season
   pendingPlayerIds: string[]; // Array of user IDs pending admin approval
