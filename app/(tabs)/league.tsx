@@ -1,14 +1,24 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Trophy, Calendar, Users } from 'lucide-react-native';
 import { useActiveSeason } from '../../hooks/useSeasons';
-import { useTopPlayers } from '../../hooks/useUsers';
+import { useSeasonTopPlayers } from '../../hooks/useUsers';
+import { useAuth } from '../../contexts/AuthContext';
+import { registerForSeason } from '../../firebase/services';
+import { useState } from 'react';
 
 export default function LeagueTab() {
-  const { season, loading: seasonLoading } = useActiveSeason();
-  const { players, loading: playersLoading } = useTopPlayers(10);
+  const { season, loading: seasonLoading, refetch: refetchSeason } = useActiveSeason();
+  const { players, loading: playersLoading } = useSeasonTopPlayers(season?.playerIds || null);
+  const { currentUserId } = useAuth();
+  const [registering, setRegistering] = useState(false);
 
   const loading = seasonLoading || playersLoading;
+
+  // Determine user's registration status
+  const isEnrolled = season && currentUserId ? season.playerIds.includes(currentUserId) : false;
+  const isPending = season && currentUserId ? season.pendingPlayerIds.includes(currentUserId) : false;
+  const canRegister = season && currentUserId && !isEnrolled && !isPending;
 
   // Calculate standings with win rate
   const standings = players.map((player, index) => ({
@@ -18,8 +28,34 @@ export default function LeagueTab() {
     losses: player.losses,
     winRate: player.matchesPlayed > 0 
       ? `${Math.round((player.wins / player.matchesPlayed) * 100)}%`
-      : '0%',
+      : '-',
+    hasMatches: player.matchesPlayed > 0,
   }));
+
+  const handleRegister = async () => {
+    if (!season || !currentUserId) return;
+
+    try {
+      setRegistering(true);
+      await registerForSeason(season.id, currentUserId);
+      Alert.alert(
+        'Registration Submitted',
+        'Your registration has been submitted and is pending admin approval.',
+        [{ text: 'OK' }]
+      );
+      // Refetch the season to update the UI
+      await refetchSeason();
+    } catch (error) {
+      console.error('Error registering for season:', error);
+      Alert.alert(
+        'Registration Failed',
+        error instanceof Error ? error.message : 'Failed to register for the season. Please try again.',
+        [{ text: 'OK' }]
+      );
+    } finally {
+      setRegistering(false);
+    }
+  };
 
   return (
     <SafeAreaView style={styles.container} edges={[]}>
@@ -46,6 +82,31 @@ export default function LeagueTab() {
           </Text>
         </View>
 
+        {/* Join League CTA - Only show if not enrolled */}
+        {!isEnrolled && season && (
+          <View style={styles.ctaCard}>
+            <Text style={styles.ctaTitle}>Want to Join?</Text>
+            <Text style={styles.ctaText}>
+              Sign up for {season.name} and compete with fellow UW students!
+            </Text>
+            {isPending ? (
+              <View style={[styles.ctaButton, styles.ctaButtonDisabled]}>
+                <Text style={styles.ctaButtonTextDisabled}>Pending Approval</Text>
+              </View>
+            ) : canRegister ? (
+              <TouchableOpacity 
+                style={styles.ctaButton} 
+                onPress={handleRegister}
+                disabled={registering}
+              >
+                <Text style={styles.ctaButtonText}>
+                  {registering ? 'Registering...' : `Register for ${season.name}`}
+                </Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+        )}
+
         {/* League Info Cards */}
         {loading ? (
           <View style={styles.loadingContainer}>
@@ -57,7 +118,7 @@ export default function LeagueTab() {
               <View style={styles.infoCard}>
                 <Trophy color="#7C3AED" size={24} />
                 <Text style={styles.infoValue}>
-                  {season?.totalPlayers || 0}
+                  {season?.playerIds.length || 0}
                 </Text>
                 <Text style={styles.infoLabel}>Players</Text>
               </View>
@@ -95,7 +156,7 @@ export default function LeagueTab() {
                   {standings.map((player) => (
                     <View key={player.rank} style={styles.tableRow}>
                       <Text style={[styles.tableCellRank, { flex: 0.7 }]}>
-                        {player.rank <= 3 ? 
+                        {player.hasMatches && player.rank <= 3 ? 
                           (player.rank === 1 ? '🥇' : player.rank === 2 ? '🥈' : '🥉') 
                           : player.rank}
                       </Text>
@@ -103,7 +164,7 @@ export default function LeagueTab() {
                         {player.name}
                       </Text>
                       <Text style={[styles.tableCell, { flex: 1 }]}>
-                        {player.wins}-{player.losses}
+                        {player.hasMatches ? `${player.wins}-${player.losses}` : '-'}
                       </Text>
                       <Text style={[styles.tableCell, { flex: 1 }]}>
                         {player.winRate}
@@ -115,17 +176,6 @@ export default function LeagueTab() {
             </View>
           </>
         )}
-
-        {/* Join League CTA */}
-        <View style={styles.ctaCard}>
-          <Text style={styles.ctaTitle}>Want to Join?</Text>
-          <Text style={styles.ctaText}>
-            Sign up for the next season and compete with fellow UW students!
-          </Text>
-          <TouchableOpacity style={styles.ctaButton}>
-            <Text style={styles.ctaButtonText}>Register for Spring 2025</Text>
-          </TouchableOpacity>
-        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -302,6 +352,14 @@ const styles = StyleSheet.create({
   },
   ctaButtonText: {
     color: '#7C3AED',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  ctaButtonDisabled: {
+    backgroundColor: 'rgba(255, 255, 255, 0.6)',
+  },
+  ctaButtonTextDisabled: {
+    color: 'rgba(124, 58, 237, 0.7)',
     fontSize: 16,
     fontWeight: '600',
   },

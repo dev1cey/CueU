@@ -35,8 +35,9 @@ export const createSeason = async (seasonData: {
       totalWeeks: seasonData.totalWeeks,
       status: 'upcoming' as SeasonStatus,
       currentWeek: 0,
-      totalPlayers: 0,
       totalMatches: 0,
+      playerIds: [],
+      pendingPlayerIds: [],
       createdAt: now,
       updatedAt: now, // Extra field
     };
@@ -125,7 +126,7 @@ export const getAllSeasons = async (): Promise<Season[]> => {
 // Increment season stats
 export const incrementSeasonStats = async (
   seasonId: string,
-  field: 'totalPlayers' | 'totalMatches',
+  field: 'totalMatches',
   incrementBy: number = 1
 ): Promise<void> => {
   try {
@@ -160,6 +161,34 @@ export const advanceSeasonWeek = async (seasonId: string): Promise<void> => {
     await updateSeason(seasonId, updates);
   } catch (error) {
     console.error('Error advancing season week:', error);
+    throw error;
+  }
+};
+
+// Register user for season (adds to pending list)
+export const registerForSeason = async (
+  seasonId: string,
+  userId: string
+): Promise<void> => {
+  try {
+    const season = await getSeasonById(seasonId);
+    if (!season) throw new Error('Season not found');
+
+    // Check if user is already enrolled or pending
+    if (season.playerIds.includes(userId)) {
+      throw new Error('User is already enrolled in this season');
+    }
+    if (season.pendingPlayerIds.includes(userId)) {
+      throw new Error('User already has a pending registration');
+    }
+
+    // Add user to pending list
+    const updatedPendingPlayerIds = [...season.pendingPlayerIds, userId];
+    await updateSeason(seasonId, {
+      pendingPlayerIds: updatedPendingPlayerIds,
+    });
+  } catch (error) {
+    console.error('Error registering for season:', error);
     throw error;
   }
 };

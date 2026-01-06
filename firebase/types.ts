@@ -24,6 +24,8 @@ export interface User {
   createdAt: Timestamp;
 }
 
+export type MatchStatus = 'planned' | 'completed';
+
 export interface Match {
   id: string;
   player1Id: string;
@@ -37,6 +39,7 @@ export interface Match {
     player1: number;
     player2: number;
   };
+  status: MatchStatus;
   createdAt: Timestamp;
 }
 
@@ -78,7 +81,8 @@ export interface Season {
   status: SeasonStatus;
   currentWeek: number;
   totalWeeks: number;
-  totalPlayers: number;
   totalMatches: number;
+  playerIds: string[]; // Array of user IDs participating in the season
+  pendingPlayerIds: string[]; // Array of user IDs pending admin approval
   createdAt: Timestamp;
 }
