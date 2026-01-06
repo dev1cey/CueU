@@ -22,7 +22,7 @@ export default function LeagueTab() {
   }));
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={[]}>
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerContent}>
@@ -30,9 +30,9 @@ export default function LeagueTab() {
             <View style={styles.logo}>
               <View style={styles.logoInner} />
             </View>
-            <View>
+            <View style={styles.titleContainer}>
               <Text style={styles.headerTitle}>CueU</Text>
-              <Text style={styles.headerSubtitle}>UW Pool Club</Text>
+              <Text style={styles.headerSubtitle}> - UW Pool Club</Text>
             </View>
           </View>
         </View>
@@ -137,9 +137,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#F9FAFB',
   },
   header: {
-    backgroundColor: '#7C3AED',
+    backgroundColor: 'white',
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(252, 211, 77, 0.3)',
+    borderBottomColor: '#E5E7EB',
+    paddingTop: 50,
   },
   headerContent: {
     flexDirection: 'row',
@@ -167,14 +168,19 @@ const styles = StyleSheet.create({
     backgroundColor: '#7C3AED',
     borderRadius: 12,
   },
+  titleContainer: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+  },
   headerTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: 'white',
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#7C3AED',
   },
   headerSubtitle: {
-    fontSize: 12,
-    color: '#FCD34D',
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#7C3AED',
   },
   scrollView: {
     flex: 1,

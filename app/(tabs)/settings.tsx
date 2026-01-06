@@ -1,15 +1,16 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { User, Bell, Moon, Lock, HelpCircle, LogOut, ChevronRight } from 'lucide-react-native';
+import { User, Bell, LogOut, ChevronRight } from 'lucide-react-native';
 import { useState } from 'react';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
+import { CommonActions, useNavigation } from '@react-navigation/native';
 
 export default function SettingsTab() {
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
-  const [darkModeEnabled, setDarkModeEnabled] = useState(false);
   const router = useRouter();
   const { currentUser, logout } = useAuth();
+  const navigation = useNavigation();
 
   const handleLogout = async () => {
     Alert.alert(
@@ -22,7 +23,17 @@ export default function SettingsTab() {
           style: 'destructive',
           onPress: async () => {
             await logout();
-            router.replace('/');
+            
+            // Navigate to root by going up to parent navigator and resetting
+            const parentNav = navigation.getParent();
+            if (parentNav) {
+              parentNav.dispatch(
+                CommonActions.reset({
+                  index: 0,
+                  routes: [{ name: 'index' }],
+                })
+              );
+            }
           },
         },
       ]
@@ -30,7 +41,7 @@ export default function SettingsTab() {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={[]}>
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerContent}>
@@ -38,9 +49,9 @@ export default function SettingsTab() {
             <View style={styles.logo}>
               <View style={styles.logoInner} />
             </View>
-            <View>
+            <View style={styles.titleContainer}>
               <Text style={styles.headerTitle}>CueU</Text>
-              <Text style={styles.headerSubtitle}>UW Pool Club</Text>
+              <Text style={styles.headerSubtitle}> - UW Pool Club</Text>
             </View>
           </View>
         </View>
@@ -55,7 +66,10 @@ export default function SettingsTab() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>PROFILE</Text>
           <View style={styles.card}>
-            <TouchableOpacity style={styles.menuItem}>
+            <TouchableOpacity 
+              style={styles.menuItem}
+              onPress={() => router.push('/edit-profile')}
+            >
               <View style={styles.menuItemLeft}>
                 <User color="#7C3AED" size={20} />
                 <View>
@@ -86,45 +100,6 @@ export default function SettingsTab() {
                 thumbColor={notificationsEnabled ? '#7C3AED' : '#F3F4F6'}
               />
             </View>
-            
-            <View style={styles.divider} />
-            
-            <View style={styles.menuItem}>
-              <View style={styles.menuItemLeft}>
-                <Moon color="#7C3AED" size={20} />
-                <Text style={styles.menuItemTitle}>Dark Mode</Text>
-              </View>
-              <Switch
-                value={darkModeEnabled}
-                onValueChange={setDarkModeEnabled}
-                trackColor={{ false: '#D1D5DB', true: '#C4B5FD' }}
-                thumbColor={darkModeEnabled ? '#7C3AED' : '#F3F4F6'}
-              />
-            </View>
-          </View>
-        </View>
-
-        {/* Account Section */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>ACCOUNT</Text>
-          <View style={styles.card}>
-            <TouchableOpacity style={styles.menuItem}>
-              <View style={styles.menuItemLeft}>
-                <Lock color="#7C3AED" size={20} />
-                <Text style={styles.menuItemTitle}>Privacy & Security</Text>
-              </View>
-              <ChevronRight color="#9CA3AF" size={20} />
-            </TouchableOpacity>
-            
-            <View style={styles.divider} />
-            
-            <TouchableOpacity style={styles.menuItem}>
-              <View style={styles.menuItemLeft}>
-                <HelpCircle color="#7C3AED" size={20} />
-                <Text style={styles.menuItemTitle}>Help & Support</Text>
-              </View>
-              <ChevronRight color="#9CA3AF" size={20} />
-            </TouchableOpacity>
           </View>
         </View>
 
@@ -146,9 +121,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#F9FAFB',
   },
   header: {
-    backgroundColor: '#7C3AED',
+    backgroundColor: 'white',
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(252, 211, 77, 0.3)',
+    borderBottomColor: '#E5E7EB',
+    paddingTop: 50,
   },
   headerContent: {
     flexDirection: 'row',
@@ -176,14 +152,19 @@ const styles = StyleSheet.create({
     backgroundColor: '#7C3AED',
     borderRadius: 12,
   },
+  titleContainer: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+  },
   headerTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: 'white',
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#7C3AED',
   },
   headerSubtitle: {
-    fontSize: 12,
-    color: '#FCD34D',
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#7C3AED',
   },
   scrollView: {
     flex: 1,
