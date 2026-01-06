@@ -1,0 +1,30 @@
+Summary: Development Server Connection Issue
+The Problem
+The app showed "Could not connect to development server" when trying to load the JavaScript bundle from Metro.
+Root Causes
+Development build vs Expo Go mismatch
+The app is a development build (has native iOS/Android code from expo prebuild)
+It cannot run in Expo Go; it requires a custom development build
+Using npm start and pressing i tried to use Expo Go, which is incompatible
+Build failure
+Missing codegen files for react-native-gesture-handler (needed for New Architecture)
+Caused by corrupted CocoaPods state after pod deintegrate
+Metro URL mismatch
+Metro was binding to the network IP (10.0.0.144:8081)
+The app expected localhost:8081
+In the iOS simulator, localhost should work, but the mismatch caused connection failures
+The Fix
+Regenerated CocoaPods dependencies
+   cd ios   pod install
+This restored the missing codegen files and fixed the build.
+Updated Metro to bind to localhost
+Modified package.json:
+"start": "expo start --localhost"
+   "start": "expo start --localhost"
+This ensures Metro binds to localhost:8081, matching what the simulator expects.
+Used the correct workflow
+Run npm start in one terminal (starts Metro on localhost)
+Run npm run ios in another terminal (builds and launches the development build)
+The development build connects to the Metro server on localhost
+Key Takeaway
+Development builds require expo run:ios (not Expo Go), and Metro must bind to localhost for the iOS simulator to connect properly.
