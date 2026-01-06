@@ -11,11 +11,8 @@ import {
   Timestamp,
 } from 'firebase/firestore';
 import { db } from '../config';
-import { Match } from '../types';
+import { Match, MatchStatus } from '../types';
 import { updateUserStats } from './userService';
-
-// Local type for match status (not in Firebase schema)
-type MatchStatus = 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
 
 const MATCHES_COLLECTION = 'matches';
 
@@ -39,7 +36,7 @@ export const createMatch = async (matchData: {
       scheduledDate: matchData.scheduledDate
         ? Timestamp.fromDate(matchData.scheduledDate)
         : undefined,
-      status: 'scheduled' as MatchStatus,
+      status: 'planned' as MatchStatus,
       createdAt: now,
       updatedAt: now,
     };
@@ -178,12 +175,12 @@ export const getUpcomingMatches = async (userId?: string): Promise<Match[]> => {
       const q1 = query(
         matchesRef,
         where('player1Id', '==', userId),
-        where('status', 'in', ['scheduled', 'in_progress'])
+        where('status', '==', 'planned')
       );
       const q2 = query(
         matchesRef,
         where('player2Id', '==', userId),
-        where('status', 'in', ['scheduled', 'in_progress'])
+        where('status', '==', 'planned')
       );
       
       const [snapshot1, snapshot2] = await Promise.all([
@@ -207,7 +204,7 @@ export const getUpcomingMatches = async (userId?: string): Promise<Match[]> => {
       // Get all upcoming matches
       q = query(
         matchesRef,
-        where('status', 'in', ['scheduled', 'in_progress']),
+        where('status', '==', 'planned'),
         orderBy('scheduledDate', 'asc')
       );
       
