@@ -34,7 +34,7 @@
     "expo-status-bar": "~3.0.9",
     "expo-web-browser": "~15.0.10",
     "firebase": "^12.7.0",
-    "lucide-react-native": "^0.460.0",
+    "lucide-react-native": "^0.562.0",
     "react": "19.1.0",
     "react-native": "0.81.5",
     "react-native-gesture-handler": "~2.28.0",
@@ -48,7 +48,7 @@
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
-    "@types/react": "~18.3.12",
+    "@types/react": "~19.1.0",
     "@types/node": "^20.0.0",
     "babel-preset-expo": "^54.0.9",
     "ts-node": "^10.9.2",

@@ -28,3 +28,11 @@ Run npm run ios in another terminal (builds and launches the development build)
 The development build connects to the Metro server on localhost
 Key Takeaway
 Development builds require expo run:ios (not Expo Go), and Metro must bind to localhost for the iOS simulator to connect properly.
+
+
+Newer thing that works:
+
+1. Run npm install -g expo-cli to install the latest Expo CLI globally.
+2. Delete your project node_modules directory and package-lock.json file
+3. Run npm install
+4. If has conflict just send to cursor
