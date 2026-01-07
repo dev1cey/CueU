@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Alert, ActivityIndicator, Modal } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Alert, ActivityIndicator } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -19,6 +19,7 @@ export default function ProfileSetup() {
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [wechat, setWechat] = useState('');
+  const [discord, setDiscord] = useState('');
   const [department, setDepartment] = useState('');
   const [skillLevel, setSkillLevel] = useState<SkillLevel | ''>('');
   const [bio, setBio] = useState('');
@@ -78,6 +79,7 @@ export default function ProfileSetup() {
         name: name.trim(),
         phone: phone.trim() || undefined,
         wechat: wechat.trim() || undefined,
+        discord: discord.trim() || undefined,
         department: department || undefined,
         skillLevel: skillLevel as SkillLevel,
         bio: bio.trim() || undefined,
@@ -121,6 +123,8 @@ export default function ProfileSetup() {
           <ScrollView 
             contentContainerStyle={styles.scrollContent}
             keyboardShouldPersistTaps="handled"
+            onScrollBeginDrag={() => setShowSkillLevelPicker(false)}
+            scrollEventThrottle={16}
           >
             <View style={styles.card}>
               <View style={styles.cardHeader}>
@@ -184,6 +188,19 @@ export default function ProfileSetup() {
                   />
                 </View>
 
+                {/* Discord */}
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Discord Username (Optional)</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="username#1234"
+                    placeholderTextColor="#9CA3AF"
+                    value={discord}
+                    onChangeText={setDiscord}
+                    editable={!isLoading}
+                  />
+                </View>
+
                 {/* Department */}
                 <View style={styles.inputGroup}>
                   <Text style={styles.label}>Department / College (Optional)</Text>
@@ -200,16 +217,47 @@ export default function ProfileSetup() {
                 {/* Skill Level */}
                 <View style={styles.inputGroup}>
                   <Text style={styles.label}>Skill Level *</Text>
-                  <TouchableOpacity
-                    style={styles.dropdownButton}
-                    onPress={() => setShowSkillLevelPicker(true)}
-                    disabled={isLoading}
-                  >
-                    <Text style={[styles.dropdownButtonText, !skillLevel && styles.dropdownPlaceholder]}>
-                      {getSkillLevelLabel(skillLevel)}
-                    </Text>
-                    <Text style={styles.dropdownIcon}>▼</Text>
-                  </TouchableOpacity>
+                  <View style={styles.dropdownContainer}>
+                    <TouchableOpacity
+                      style={styles.dropdownButton}
+                      onPress={() => setShowSkillLevelPicker(!showSkillLevelPicker)}
+                      disabled={isLoading}
+                    >
+                      <Text style={[styles.dropdownButtonText, !skillLevel && styles.dropdownPlaceholder]}>
+                        {getSkillLevelLabel(skillLevel)}
+                      </Text>
+                      <Text style={[styles.dropdownIcon, showSkillLevelPicker && styles.dropdownIconOpen]}>▼</Text>
+                    </TouchableOpacity>
+                    {showSkillLevelPicker && (
+                      <View style={styles.dropdownMenu}>
+                        {SKILL_LEVELS.map((skill) => (
+                          <TouchableOpacity
+                            key={skill.value}
+                            style={[
+                              styles.dropdownOption,
+                              skillLevel === skill.value && styles.dropdownOptionSelected,
+                            ]}
+                            onPress={() => {
+                              setSkillLevel(skill.value);
+                              setShowSkillLevelPicker(false);
+                            }}
+                          >
+                            <Text
+                              style={[
+                                styles.dropdownOptionText,
+                                skillLevel === skill.value && styles.dropdownOptionTextSelected,
+                              ]}
+                            >
+                              {skill.label}
+                            </Text>
+                            {skillLevel === skill.value && (
+                              <Text style={styles.dropdownCheckmark}>✓</Text>
+                            )}
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    )}
+                  </View>
                   <Text style={styles.helperText}>
                     Your skill level helps us create fair matchups
                   </Text>
@@ -271,51 +319,6 @@ export default function ProfileSetup() {
         </View>
       )}
 
-      {/* Skill Level Picker Modal */}
-      <Modal
-        visible={showSkillLevelPicker}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => setShowSkillLevelPicker(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Select Skill Level</Text>
-              <TouchableOpacity onPress={() => setShowSkillLevelPicker(false)}>
-                <Text style={styles.modalCloseButton}>✕</Text>
-              </TouchableOpacity>
-            </View>
-            <ScrollView style={styles.modalScroll}>
-              {SKILL_LEVELS.map((skill) => (
-                <TouchableOpacity
-                  key={skill.value}
-                  style={[
-                    styles.modalOption,
-                    skillLevel === skill.value && styles.modalOptionSelected,
-                  ]}
-                  onPress={() => {
-                    setSkillLevel(skill.value);
-                    setShowSkillLevelPicker(false);
-                  }}
-                >
-                  <Text
-                    style={[
-                      styles.modalOptionText,
-                      skillLevel === skill.value && styles.modalOptionTextSelected,
-                    ]}
-                  >
-                    {skill.label}
-                  </Text>
-                  {skillLevel === skill.value && (
-                    <Text style={styles.modalCheckmark}>✓</Text>
-                  )}
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
     </LinearGradient>
   );
 }
@@ -387,6 +390,10 @@ const styles = StyleSheet.create({
     height: 100,
     paddingTop: 12,
   },
+  dropdownContainer: {
+    position: 'relative',
+    zIndex: 1000,
+  },
   dropdownButton: {
     borderWidth: 1,
     borderColor: '#D1D5DB',
@@ -409,6 +416,55 @@ const styles = StyleSheet.create({
   dropdownIcon: {
     fontSize: 12,
     color: '#6B7280',
+    marginLeft: 8,
+    transform: [{ rotate: '0deg' }],
+  },
+  dropdownIconOpen: {
+    transform: [{ rotate: '180deg' }],
+  },
+  dropdownMenu: {
+    position: 'absolute',
+    top: '100%',
+    left: 0,
+    right: 0,
+    marginTop: 4,
+    backgroundColor: 'white',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 5,
+    zIndex: 1001,
+    overflow: 'hidden',
+  },
+  dropdownOption: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  dropdownOptionSelected: {
+    backgroundColor: '#F3F4F6',
+  },
+  dropdownOptionText: {
+    fontSize: 16,
+    color: '#1F2937',
+    flex: 1,
+  },
+  dropdownOptionTextSelected: {
+    color: '#7C3AED',
+    fontWeight: '600',
+  },
+  dropdownCheckmark: {
+    fontSize: 16,
+    color: '#7C3AED',
+    fontWeight: 'bold',
     marginLeft: 8,
   },
   helperText: {
@@ -469,64 +525,5 @@ const styles = StyleSheet.create({
     marginTop: 4,
     fontSize: 14,
     color: '#6B7280',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
-  },
-  modalContent: {
-    backgroundColor: 'white',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: '70%',
-    paddingBottom: 20,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1F2937',
-  },
-  modalCloseButton: {
-    fontSize: 24,
-    color: '#6B7280',
-    fontWeight: '300',
-  },
-  modalScroll: {
-    maxHeight: 400,
-  },
-  modalOption: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
-  },
-  modalOptionSelected: {
-    backgroundColor: '#F3F4F6',
-  },
-  modalOptionText: {
-    fontSize: 16,
-    color: '#1F2937',
-    flex: 1,
-  },
-  modalOptionTextSelected: {
-    color: '#7C3AED',
-    fontWeight: '600',
-  },
-  modalCheckmark: {
-    fontSize: 20,
-    color: '#7C3AED',
-    fontWeight: 'bold',
   },
 });

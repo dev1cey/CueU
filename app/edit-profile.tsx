@@ -19,6 +19,7 @@ export default function EditProfile() {
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [wechat, setWechat] = useState('');
+  const [discord, setDiscord] = useState('');
   const [department, setDepartment] = useState('');
   const [skillLevel, setSkillLevel] = useState<SkillLevel | ''>('');
   const [bio, setBio] = useState('');
@@ -39,6 +40,7 @@ export default function EditProfile() {
       setEmail(currentUser.email || '');
       setPhone(currentUser.phone?.toString() || '');
       setWechat(currentUser.wechat || '');
+      setDiscord(currentUser.discord || '');
       setDepartment(currentUser.department || '');
       setSkillLevel(currentUser.skillLevel || '');
       setBio(currentUser.bio || '');
@@ -85,6 +87,7 @@ export default function EditProfile() {
         name: name.trim(),
         phone: phone.trim() ? Number(phone.trim()) : undefined,
         wechat: wechat.trim() || undefined,
+        discord: discord.trim() || undefined,
         department: department.trim() || undefined,
         skillLevel: skillLevel as SkillLevel,
         skillLevelNum: skillLevelMap[skillLevel as SkillLevel],
@@ -191,6 +194,19 @@ export default function EditProfile() {
                   placeholderTextColor="#9CA3AF"
                   value={wechat}
                   onChangeText={setWechat}
+                  editable={!isLoading}
+                />
+              </View>
+
+              {/* Discord */}
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Discord Username (Optional)</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="username#1234"
+                  placeholderTextColor="#9CA3AF"
+                  value={discord}
+                  onChangeText={setDiscord}
                   editable={!isLoading}
                 />
               </View>

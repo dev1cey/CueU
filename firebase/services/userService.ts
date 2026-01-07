@@ -26,6 +26,7 @@ export const createUser = async (
     name: string;
     phone?: string;
     wechat?: string;
+    discord?: string;
     department?: string;
     skillLevel: SkillLevel;
     bio?: string;

@@ -12,6 +12,7 @@ export interface User {
   email: string;
   phone?: number;
   wechat?: string;
+  discord?: string;
   department?: string;
   bio: string;
   profileImageUrl?: string;

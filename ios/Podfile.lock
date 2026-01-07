@@ -1,9 +1,11 @@
 PODS:
   - EXApplication (7.0.8):
     - ExpoModulesCore
-  - EXConstants (18.0.12):
+  - EXConstants (18.0.13):
     - ExpoModulesCore
-  - Expo (54.0.30):
+  - EXNotifications (0.32.16):
+    - ExpoModulesCore
+  - Expo (54.0.31):
     - ExpoModulesCore
     - hermes-engine
     - RCTRequired
@@ -2028,7 +2030,7 @@ PODS:
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
     - Yoga
-  - RNWorklets (0.7.1):
+  - RNWorklets (0.5.1):
     - hermes-engine
     - RCTRequired
     - RCTTypeSafety
@@ -2050,9 +2052,9 @@ PODS:
     - ReactCommon/turbomodule/bridging
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
-    - RNWorklets/worklets (= 0.7.1)
+    - RNWorklets/worklets (= 0.5.1)
     - Yoga
-  - RNWorklets/worklets (0.7.1):
+  - RNWorklets/worklets (0.5.1):
     - hermes-engine
     - RCTRequired
     - RCTTypeSafety
@@ -2074,9 +2076,9 @@ PODS:
     - ReactCommon/turbomodule/bridging
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
-    - RNWorklets/worklets/apple (= 0.7.1)
+    - RNWorklets/worklets/apple (= 0.5.1)
     - Yoga
-  - RNWorklets/worklets/apple (0.7.1):
+  - RNWorklets/worklets/apple (0.5.1):
     - hermes-engine
     - RCTRequired
     - RCTTypeSafety
@@ -2102,8 +2104,9 @@ PODS:
   - Yoga (0.0.0)
 
 DEPENDENCIES:
-  - EXApplication (from `../node_modules/expo-auth-session/node_modules/expo-application/ios`)
+  - EXApplication (from `../node_modules/expo-application/ios`)
   - EXConstants (from `../node_modules/expo-constants/ios`)
+  - EXNotifications (from `../node_modules/expo-notifications/ios`)
   - Expo (from `../node_modules/expo`)
   - ExpoAsset (from `../node_modules/expo-asset/ios`)
   - ExpoCrypto (from `../node_modules/expo-crypto/ios`)
@@ -2196,9 +2199,11 @@ DEPENDENCIES:
 
 EXTERNAL SOURCES:
   EXApplication:
-    :path: "../node_modules/expo-auth-session/node_modules/expo-application/ios"
+    :path: "../node_modules/expo-application/ios"
   EXConstants:
     :path: "../node_modules/expo-constants/ios"
+  EXNotifications:
+    :path: "../node_modules/expo-notifications/ios"
   Expo:
     :path: "../node_modules/expo"
   ExpoAsset:
@@ -2379,8 +2384,9 @@ EXTERNAL SOURCES:
 
 SPEC CHECKSUMS:
   EXApplication: 1e98d4b1dccdf30627f92917f4b2c5a53c330e5f
-  EXConstants: 805f35b1b295c542ca6acce836f21a1f9ee104d5
-  Expo: 60c21ba34593688a2a6e8445c1f8b44abb0e3fae
+  EXConstants: fce59a631a06c4151602843667f7cfe35f81e271
+  EXNotifications: 9eec98712cc814ceff916d876cb53859003b0597
+  Expo: 04993fbd7b06dc98ffac58da8847298470dc3db1
   ExpoAsset: f867e55ceb428aab99e1e8c082b5aee7c159ea18
   ExpoCrypto: b6105ebaa15d6b38a811e71e43b52cd934945322
   ExpoFileSystem: 858a44267a3e6e9057e0888ad7c7cfbf55d52063
@@ -2466,9 +2472,9 @@ SPEC CHECKSUMS:
   RNReanimated: e5c702a3e24cc1c68b2de67671713f35461678f4
   RNScreens: d8d6f1792f6e7ac12b0190d33d8d390efc0c1845
   RNSVG: 31d6639663c249b7d5abc9728dde2041eb2a3c34
-  RNWorklets: 9eb6d567fa43984e96b6924a6df504b8a15980cd
+  RNWorklets: 76fce72926e28e304afb44f0da23b2d24f2c1fa0
   Yoga: 5934998fbeaef7845dbf698f698518695ab4cd1a
 
-PODFILE CHECKSUM: 564c082b2d98ff32dfc9fb17131a28453eb983bc
+PODFILE CHECKSUM: 918efa632e990f79bd88d8c6d32d52db207a65b2
 
 COCOAPODS: 1.16.2

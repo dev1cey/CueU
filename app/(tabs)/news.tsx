@@ -1,5 +1,6 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Modal, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 import { useAllNews } from '../../hooks/useNews';
 import { News } from '../../firebase/types';
 import { useState } from 'react';
@@ -17,18 +18,11 @@ const formatDate = (timestamp: any): string => {
 
 export default function NewsTab() {
   const { news, loading, error, refetch } = useAllNews();
-  const [selectedNews, setSelectedNews] = useState<News | null>(null);
-  const [modalVisible, setModalVisible] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const router = useRouter();
 
   const handleNewsPress = (newsItem: News) => {
-    setSelectedNews(newsItem);
-    setModalVisible(true);
-  };
-
-  const closeModal = () => {
-    setModalVisible(false);
-    setSelectedNews(null);
+    router.push(`/news-details?newsId=${newsItem.id}`);
   };
 
   const onRefresh = async () => {
@@ -116,44 +110,6 @@ export default function NewsTab() {
           ))
         )}
       </ScrollView>
-
-      {/* News Detail Modal */}
-      <Modal
-        animationType="slide"
-        transparent={false}
-        visible={modalVisible}
-        onRequestClose={closeModal}
-      >
-        <SafeAreaView style={styles.modalContainer} edges={['top']}>
-          <View style={styles.modalHeader}>
-            <TouchableOpacity style={styles.backButton} onPress={closeModal}>
-              <Text style={styles.backButtonText}>← Back</Text>
-            </TouchableOpacity>
-          </View>
-          <ScrollView style={styles.modalScrollView} contentContainerStyle={styles.modalScrollContent}>
-            {selectedNews && (
-              <>
-                <Text style={styles.modalTitle}>{selectedNews.title}</Text>
-                <View style={styles.modalMeta}>
-                  <Text style={styles.modalAuthor}>{selectedNews.author}</Text>
-                  <Text style={styles.modalSeparator}>•</Text>
-                  <Text style={styles.modalDate}>{formatDate(selectedNews.publishedDate)}</Text>
-                </View>
-                {selectedNews.tags && selectedNews.tags.length > 0 && (
-                  <View style={styles.modalTagsContainer}>
-                    {selectedNews.tags.map((tag, index) => (
-                      <View key={index} style={styles.modalTag}>
-                        <Text style={styles.modalTagText}>{tag}</Text>
-                      </View>
-                    ))}
-                  </View>
-                )}
-                <Text style={styles.modalContentText}>{selectedNews.content}</Text>
-              </>
-            )}
-          </ScrollView>
-        </SafeAreaView>
-      </Modal>
     </SafeAreaView>
   );
 }
@@ -341,78 +297,5 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#7C3AED',
     fontWeight: '500',
-  },
-  modalContainer: {
-    flex: 1,
-    backgroundColor: '#F9FAFB',
-  },
-  modalHeader: {
-    backgroundColor: '#7C3AED',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(252, 211, 77, 0.3)',
-  },
-  backButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  backButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  modalScrollView: {
-    flex: 1,
-  },
-  modalScrollContent: {
-    padding: 20,
-  },
-  modalTitle: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#1F2937',
-    marginBottom: 12,
-  },
-  modalMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  modalAuthor: {
-    fontSize: 14,
-    color: '#7C3AED',
-    fontWeight: '600',
-  },
-  modalSeparator: {
-    fontSize: 14,
-    color: '#9CA3AF',
-    marginHorizontal: 8,
-  },
-  modalDate: {
-    fontSize: 14,
-    color: '#6B7280',
-  },
-  modalTagsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginBottom: 20,
-    gap: 8,
-  },
-  modalTag: {
-    backgroundColor: '#EDE9FE',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
-  },
-  modalTagText: {
-    fontSize: 12,
-    color: '#7C3AED',
-    fontWeight: '500',
-  },
-  modalContentText: {
-    fontSize: 16,
-    color: '#4B5563',
-    lineHeight: 24,
   },
 });

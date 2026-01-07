@@ -13,6 +13,7 @@ export default function RootLayout() {
           <Stack.Screen name="profile-setup" />
           <Stack.Screen name="match-history" />
           <Stack.Screen name="match-details" />
+          <Stack.Screen name="news-details" />
           <Stack.Screen name="(tabs)" />
         </Stack>
         <StatusBar style="auto" />
