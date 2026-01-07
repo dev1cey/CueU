@@ -4,4 +4,5 @@ export * from './matchService';
 export * from './eventService';
 export * from './newsService';
 export * from './seasonService';
+export * from './reportService';
 

@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, Alert, Modal, Pressable, ActivityIndicator, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, Alert, Modal, Pressable, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { User, Bell, LogOut, ChevronRight, ChevronDown } from 'lucide-react-native';
 import { useState, useEffect } from 'react';
@@ -13,7 +13,6 @@ export default function SettingsTab() {
   const [showUserPicker, setShowUserPicker] = useState(false);
   const [allUsers, setAllUsers] = useState<UserType[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
   const router = useRouter();
   const { currentUser, logout, switchUser } = useAuth();
   const navigation = useNavigation();
@@ -82,17 +81,6 @@ export default function SettingsTab() {
     }
   };
 
-  const onRefresh = async () => {
-    setRefreshing(true);
-    try {
-      if (isTestUser) {
-        await fetchAllUsers();
-      }
-    } finally {
-      setRefreshing(false);
-    }
-  };
-
   return (
     <SafeAreaView style={styles.container} edges={[]}>
       {/* Header */}
@@ -113,9 +101,6 @@ export default function SettingsTab() {
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-        }
       >
         <View style={styles.titleSection}>
           <Text style={styles.pageTitle}>Settings</Text>

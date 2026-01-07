@@ -9,10 +9,7 @@
  */
 
 import { initializeApp } from 'firebase/app';
-import { getFirestore } from 'firebase/firestore';
-import { createMatch } from '../services/matchService';
-import { getAllSeasons } from '../services/seasonService';
-import { getAllUsers } from '../services/userService';
+import { getFirestore, collection, getDocs, addDoc, Timestamp } from 'firebase/firestore';
 
 // Firebase configuration
 const firebaseConfig = {
@@ -30,18 +27,51 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
+async function getAllUsers() {
+  const usersRef = collection(db, 'users');
+  const querySnapshot = await getDocs(usersRef);
+  return querySnapshot.docs.map(doc => ({
+    id: doc.id,
+    ...doc.data()
+  })) as any[];
+}
+
+async function getAllSeasons() {
+  const seasonsRef = collection(db, 'seasons');
+  const querySnapshot = await getDocs(seasonsRef);
+  return querySnapshot.docs.map(doc => ({
+    id: doc.id,
+    ...doc.data()
+  })) as any[];
+}
+
+async function createMatch(matchData: any) {
+  const matchesRef = collection(db, 'matches');
+  const now = Timestamp.now();
+
+  const newMatch: any = {
+    ...matchData,
+    status: 'planned',
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  const docRef = await addDoc(matchesRef, newMatch);
+  return docRef.id;
+}
+
 async function addCustomTestMatch(player1Query: string, player2Query: string) {
   try {
     console.log('🔍 Fetching all users...');
     const allUsers = await getAllUsers();
     
     // Find players by name or email (case-insensitive)
-    const player1 = allUsers.find(user => 
+    const player1 = allUsers.find((user: any) => 
       user.name.toLowerCase().includes(player1Query.toLowerCase()) || 
       user.email.toLowerCase().includes(player1Query.toLowerCase())
     );
     
-    const player2 = allUsers.find(user => 
+    const player2 = allUsers.find((user: any) => 
       user.name.toLowerCase().includes(player2Query.toLowerCase()) || 
       user.email.toLowerCase().includes(player2Query.toLowerCase())
     );
@@ -49,14 +79,14 @@ async function addCustomTestMatch(player1Query: string, player2Query: string) {
     if (!player1) {
       console.error(`❌ Player "${player1Query}" not found!`);
       console.log('\n📋 Available users:');
-      allUsers.forEach(user => console.log(`  - ${user.name} (${user.email})`));
+      allUsers.forEach((user: any) => console.log(`  - ${user.name} (${user.email})`));
       return;
     }
     
     if (!player2) {
       console.error(`❌ Player "${player2Query}" not found!`);
       console.log('\n📋 Available users:');
-      allUsers.forEach(user => console.log(`  - ${user.name} (${user.email})`));
+      allUsers.forEach((user: any) => console.log(`  - ${user.name} (${user.email})`));
       return;
     }
     
@@ -71,14 +101,14 @@ async function addCustomTestMatch(player1Query: string, player2Query: string) {
     // Find "Test Season 2025"
     console.log('\n🔍 Fetching Test Season 2025...');
     const allSeasons = await getAllSeasons();
-    const testSeason = allSeasons.find(season => 
+    const testSeason = allSeasons.find((season: any) => 
       season.name.toLowerCase().includes('test season 2025')
     );
     
     if (!testSeason) {
       console.error('❌ Test Season 2025 not found!');
       console.log('\n📋 Available seasons:');
-      allSeasons.forEach(season => console.log(`  - ${season.name} (${season.status})`));
+      allSeasons.forEach((season: any) => console.log(`  - ${season.name} (${season.status})`));
       return;
     }
     
@@ -137,4 +167,3 @@ addCustomTestMatch(player1Query, player2Query)
     console.error('\n✗ Script failed:', error);
     process.exit(1);
   });
-

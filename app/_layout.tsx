@@ -11,6 +11,8 @@ export default function RootLayout() {
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="index" />
           <Stack.Screen name="profile-setup" />
+          <Stack.Screen name="match-history" />
+          <Stack.Screen name="match-details" />
           <Stack.Screen name="(tabs)" />
         </Stack>
         <StatusBar style="auto" />

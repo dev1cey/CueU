@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Modal } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Modal, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAllNews } from '../../hooks/useNews';
 import { News } from '../../firebase/types';
@@ -19,6 +19,7 @@ export default function NewsTab() {
   const { news, loading, error, refetch } = useAllNews();
   const [selectedNews, setSelectedNews] = useState<News | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   const handleNewsPress = (newsItem: News) => {
     setSelectedNews(newsItem);
@@ -28,6 +29,15 @@ export default function NewsTab() {
   const closeModal = () => {
     setModalVisible(false);
     setSelectedNews(null);
+  };
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await refetch();
+    } finally {
+      setRefreshing(false);
+    }
   };
 
   return (
@@ -47,7 +57,13 @@ export default function NewsTab() {
         </View>
       </View>
 
-      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
+      <ScrollView 
+        style={styles.scrollView} 
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+      >
         <View style={styles.titleSection}>
           <Text style={styles.pageTitle}>News & Updates</Text>
           <Text style={styles.pageSubtitle}>Stay updated with the latest from the club</Text>

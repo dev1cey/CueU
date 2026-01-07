@@ -1,16 +1,18 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert, Modal, TextInput, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Trophy, Calendar, Users, X } from 'lucide-react-native';
+import { useRouter } from 'expo-router';
+import { Trophy, Calendar, Users, X, Flag } from 'lucide-react-native';
 import { useActiveSeason } from '../../hooks/useSeasons';
 import { useSeasonTopPlayers } from '../../hooks/useUsers';
 import { useAuth } from '../../contexts/AuthContext';
-import { registerForSeason, completeMatch, getUserById } from '../../firebase/services';
+import { registerForSeason, completeMatch, getUserById, createMatchReport, getReportsByMatchId } from '../../firebase/services';
 import { useState, useEffect } from 'react';
 import { useUpcomingMatches } from '../../hooks/useMatches';
 import { Match, User } from '../../firebase/types';
 import { getRacksNeeded } from '../../firebase/utils/handicapUtils';
 
 export default function LeagueTab() {
+  const router = useRouter();
   const [refreshing, setRefreshing] = useState(false);
 
   const { season, loading: seasonLoading, refetch: refetchSeason } = useActiveSeason();
@@ -19,7 +21,7 @@ export default function LeagueTab() {
     undefined,
     season?.id
   );
-  const { currentUserId } = useAuth();
+  const { currentUserId, currentUser } = useAuth();
   const [registering, setRegistering] = useState(false);
   const { matches: upcomingMatches, loading: matchesLoading, refetch: refetchMatches } = useUpcomingMatches(currentUserId || undefined);
   
@@ -34,6 +36,12 @@ export default function LeagueTab() {
   const [player1Data, setPlayer1Data] = useState<User | null>(null);
   const [player2Data, setPlayer2Data] = useState<User | null>(null);
   const [loadingMatchDetails, setLoadingMatchDetails] = useState(false);
+  
+  // State for report issue
+  const [reportModalVisible, setReportModalVisible] = useState(false);
+  const [reportMessage, setReportMessage] = useState('');
+  const [submittingReport, setSubmittingReport] = useState(false);
+  const [hasExistingReport, setHasExistingReport] = useState(false);
 
   const loading = seasonLoading || playersLoading;
 
@@ -88,15 +96,24 @@ export default function LeagueTab() {
     setPlayer2Score('');
     setModalVisible(true);
     
-    // Load player details for the match
+    // Load player details for the match and check for existing reports
     setLoadingMatchDetails(true);
     try {
-      const [p1, p2] = await Promise.all([
+      const [p1, p2, reports] = await Promise.all([
         getUserById(match.player1Id),
         getUserById(match.player2Id),
+        getReportsByMatchId(match.id),
       ]);
       setPlayer1Data(p1);
       setPlayer2Data(p2);
+      
+      // Check if current user has already reported this match
+      if (currentUserId) {
+        const userReport = reports.find(report => 
+          report.reportedBy === currentUserId && report.status === 'pending'
+        );
+        setHasExistingReport(!!userReport);
+      }
     } catch (error) {
       console.error('Error loading match details:', error);
     } finally {
@@ -105,12 +122,12 @@ export default function LeagueTab() {
   };
 
   const handleSubmitScore = async () => {
-    if (!selectedMatch || !currentUserId) return;
+    if (!selectedMatch || !currentUserId || !player1Data || !player2Data) return;
 
     const p1Score = parseInt(player1Score);
     const p2Score = parseInt(player2Score);
 
-    // Validate scores
+    // Validate scores are numbers
     if (isNaN(p1Score) || isNaN(p2Score) || p1Score < 0 || p2Score < 0) {
       Alert.alert('Invalid Score', 'Please enter valid scores for both players.');
       return;
@@ -121,7 +138,88 @@ export default function LeagueTab() {
       return;
     }
 
-    // Determine winner
+    // Get racks needed for each player
+    const racksNeeded = getRacksNeeded(
+      player1Data.skillLevelNum,
+      player2Data.skillLevelNum
+    );
+
+    const player1Name = selectedMatch.player1Name;
+    const player2Name = selectedMatch.player2Name;
+
+    // Check if scores exceed target racks (invalid scenario)
+    const player1ExceedsTarget = p1Score > racksNeeded.player1;
+    const player2ExceedsTarget = p2Score > racksNeeded.player2;
+    
+    if (player1ExceedsTarget && player2ExceedsTarget) {
+      Alert.alert(
+        'Invalid Score',
+        `Both players exceeded their target racks. ${player1Name} needs ${racksNeeded.player1} racks (entered ${p1Score}), and ${player2Name} needs ${racksNeeded.player2} racks (entered ${p2Score}). A player cannot exceed their target rack.`
+      );
+      return;
+    }
+
+    if (player1ExceedsTarget) {
+      Alert.alert(
+        'Invalid Score',
+        `${player1Name} exceeded their target rack. They need exactly ${racksNeeded.player1} racks to win, but entered ${p1Score}. A player cannot exceed their target rack.`
+      );
+      return;
+    }
+
+    if (player2ExceedsTarget) {
+      Alert.alert(
+        'Invalid Score',
+        `${player2Name} exceeded their target rack. They need exactly ${racksNeeded.player2} racks to win, but entered ${p2Score}. A player cannot exceed their target rack.`
+      );
+      return;
+    }
+
+    // Check if players reached their target racks
+    const player1HasTarget = p1Score === racksNeeded.player1;
+    const player2HasTarget = p2Score === racksNeeded.player2;
+
+    // Scenario 1: Both scores are lower than target (neither reached target)
+    if (!player1HasTarget && !player2HasTarget) {
+      Alert.alert(
+        'Invalid Score',
+        `Neither player reached their target racks. ${player1Name} needs ${racksNeeded.player1} racks (entered ${p1Score}), and ${player2Name} needs ${racksNeeded.player2} racks (entered ${p2Score}). Exactly one player must reach their target rack to win.`
+      );
+      return;
+    }
+
+    // Scenario 2: Both players reached their target (both have exactly their target)
+    if (player1HasTarget && player2HasTarget) {
+      Alert.alert(
+        'Invalid Score',
+        `Both players reached their target racks. ${player1Name} has ${racksNeeded.player1} racks and ${player2Name} has ${racksNeeded.player2} racks. Only one player can reach their target rack to win the match.`
+      );
+      return;
+    }
+
+    // Validate that the losing player has a score between 0 and their target rack - 1
+    // The winner is whoever reaches their target rack first, regardless of the other player's score
+    if (player1HasTarget) {
+      // Player 1 reached target, so player 2 should have score < player2's target rack
+      if (p2Score >= racksNeeded.player2) {
+        Alert.alert(
+          'Invalid Score',
+          `${player1Name} reached their target of ${racksNeeded.player1} racks, so ${player2Name} must have a score between 0 and ${racksNeeded.player2 - 1} racks. ${player2Name} entered ${p2Score}, which is invalid.`
+        );
+        return;
+      }
+    } else {
+      // Player 2 reached target, so player 1 should have score < player1's target rack
+      if (p1Score >= racksNeeded.player1) {
+        Alert.alert(
+          'Invalid Score',
+          `${player2Name} reached their target of ${racksNeeded.player2} racks, so ${player1Name} must have a score between 0 and ${racksNeeded.player1 - 1} racks. ${player1Name} entered ${p1Score}, which is invalid.`
+        );
+        return;
+      }
+    }
+
+    // Determine winner (should match the player who reached their target rack)
     const winnerId = p1Score > p2Score ? selectedMatch.player1Id : selectedMatch.player2Id;
 
     try {
@@ -145,6 +243,43 @@ export default function LeagueTab() {
       );
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleReportIssue = () => {
+    setReportModalVisible(true);
+    setReportMessage('');
+  };
+
+  const handleSubmitReport = async () => {
+    if (!selectedMatch || !currentUserId || !currentUser) return;
+
+    if (!reportMessage.trim()) {
+      Alert.alert('Error', 'Please enter a message describing the issue.');
+      return;
+    }
+
+    try {
+      setSubmittingReport(true);
+      await createMatchReport({
+        matchId: selectedMatch.id,
+        reportedBy: currentUserId,
+        reportedByName: currentUser.name,
+        message: reportMessage.trim(),
+      });
+      
+      Alert.alert('Success', 'Your report has been submitted. An admin will review it shortly.');
+      setReportModalVisible(false);
+      setReportMessage('');
+      setHasExistingReport(true);
+    } catch (error) {
+      console.error('Error submitting report:', error);
+      Alert.alert(
+        'Error',
+        error instanceof Error ? error.message : 'Failed to submit report. Please try again.'
+      );
+    } finally {
+      setSubmittingReport(false);
     }
   };
 
@@ -251,32 +386,44 @@ export default function LeagueTab() {
             </View>
 
             {/* Upcoming Matches */}
-            {isEnrolled && upcomingMatches.length > 0 && (
+            {isEnrolled && (
               <View style={styles.card}>
-                <Text style={styles.cardTitle}>YOUR UPCOMING MATCHES</Text>
-                <View style={styles.matchesList}>
-                  {upcomingMatches.map((match) => {
-                    const opponentName = match.player1Id === currentUserId 
-                      ? match.player2Name 
-                      : match.player1Name;
-                    
-                    return (
-                      <TouchableOpacity
-                        key={match.id}
-                        style={styles.matchCardSimple}
-                        onPress={() => handleMatchClick(match)}
-                      >
-                        <View style={styles.matchSimpleContent}>
-                          <View>
-                            <Text style={styles.matchWeekSimple}>Week {match.weekNumber}</Text>
-                            <Text style={styles.opponentName}>vs {opponentName}</Text>
-                          </View>
-                          <Text style={styles.tapToView}>Tap to view →</Text>
-                        </View>
-                      </TouchableOpacity>
-                    );
-                  })}
+                <View style={styles.cardHeader}>
+                  <Text style={styles.cardTitle}>UPCOMING MATCHES</Text>
+                  <TouchableOpacity
+                    style={styles.historyButton}
+                    onPress={() => router.push('/match-history')}
+                  >
+                    <Text style={styles.historyButtonText}>View History</Text>
+                  </TouchableOpacity>
                 </View>
+                {upcomingMatches.length > 0 ? (
+                  <View style={styles.matchesList}>
+                    {upcomingMatches.map((match) => {
+                      const opponentName = match.player1Id === currentUserId 
+                        ? match.player2Name 
+                        : match.player1Name;
+                      
+                      return (
+                        <TouchableOpacity
+                          key={match.id}
+                          style={styles.matchCardSimple}
+                          onPress={() => handleMatchClick(match)}
+                        >
+                          <View style={styles.matchSimpleContent}>
+                            <View>
+                              <Text style={styles.matchWeekSimple}>Week {match.weekNumber}</Text>
+                              <Text style={styles.opponentName}>vs {opponentName}</Text>
+                            </View>
+                            <Text style={styles.tapToView}>Tap to view →</Text>
+                          </View>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                ) : (
+                  <Text style={styles.emptyText}>No upcoming matches</Text>
+                )}
               </View>
             )}
 
@@ -355,17 +502,29 @@ export default function LeagueTab() {
                     <View style={styles.handicapSection}>
                       <Text style={styles.sectionTitle}>Match Format</Text>
                       {(() => {
-                        const racksNeeded = getRacksNeeded(
-                          player1Data.skillLevelNum,
-                          player2Data.skillLevelNum
-                        );
+                        // For completed matches, use stored values; for planned matches, calculate from current skill levels
+                        const racksNeeded = selectedMatch.status === 'completed' && 
+                          selectedMatch.player1RacksNeeded && selectedMatch.player2RacksNeeded
+                          ? {
+                              player1: selectedMatch.player1RacksNeeded,
+                              player2: selectedMatch.player2RacksNeeded
+                            }
+                          : getRacksNeeded(
+                              player1Data.skillLevelNum,
+                              player2Data.skillLevelNum
+                            );
+                        
                         const isPlayer1CurrentUser = selectedMatch.player1Id === currentUserId;
                         const opponentName = isPlayer1CurrentUser
                           ? selectedMatch.player2Name
                           : selectedMatch.player1Name;
-                        const opponentSkillLevel = isPlayer1CurrentUser
-                          ? player2Data.skillLevelNum
-                          : player1Data.skillLevelNum;
+                        
+                        // For completed matches, use stored skill levels
+                        const opponentSkillLevel = selectedMatch.status === 'completed' && 
+                          selectedMatch.player1SkillLevel && selectedMatch.player2SkillLevel
+                          ? (isPlayer1CurrentUser ? selectedMatch.player2SkillLevel : selectedMatch.player1SkillLevel)
+                          : (isPlayer1CurrentUser ? player2Data.skillLevelNum : player1Data.skillLevelNum);
+                        
                         const currentUserRacks = isPlayer1CurrentUser
                           ? racksNeeded.player1
                           : racksNeeded.player2;
@@ -423,71 +582,235 @@ export default function LeagueTab() {
                       );
                     })()}
 
-                    {/* Score Reporting Section */}
-                    <View style={styles.scoreSection}>
-                      <Text style={styles.sectionTitle}>Report Score</Text>
-                      <View style={styles.scoreInputContainer}>
-                        <View style={styles.playerScoreSection}>
-                          <Text style={[
-                            styles.modalPlayerName,
-                            selectedMatch.player1Id === currentUserId && styles.modalCurrentUser
-                          ]}>
-                            {selectedMatch.player1Name}
-                            {selectedMatch.player1Id === currentUserId && ' (You)'}
-                          </Text>
-                          <TextInput
-                            style={styles.scoreInput}
-                            placeholder="Racks won"
-                            keyboardType="number-pad"
-                            value={player1Score}
-                            onChangeText={setPlayer1Score}
-                          />
+                    {/* Score Section - Different for completed vs planned matches */}
+                    {selectedMatch.status === 'completed' ? (
+                      <>
+                        {/* Completed Match Score Display */}
+                        <View style={styles.scoreSection}>
+                          <Text style={styles.sectionTitle}>Match Result</Text>
+                          <View style={styles.completedScoreContainer}>
+                            <View style={styles.completedScorePlayer}>
+                              <Text style={[
+                                styles.completedScoreName,
+                                selectedMatch.player1Id === currentUserId && styles.modalCurrentUser
+                              ]}>
+                                {selectedMatch.player1Name}
+                                {selectedMatch.player1Id === currentUserId && ' (You)'}
+                              </Text>
+                              <Text style={[
+                                styles.completedScoreValue,
+                                selectedMatch.winnerId === selectedMatch.player1Id && styles.winnerScore
+                              ]}>
+                                {selectedMatch.score?.player1 ?? 0}
+                              </Text>
+                            </View>
+                            <Text style={styles.modalVsText}>VS</Text>
+                            <View style={styles.completedScorePlayer}>
+                              <Text style={[
+                                styles.completedScoreName,
+                                selectedMatch.player2Id === currentUserId && styles.modalCurrentUser
+                              ]}>
+                                {selectedMatch.player2Name}
+                                {selectedMatch.player2Id === currentUserId && ' (You)'}
+                              </Text>
+                              <Text style={[
+                                styles.completedScoreValue,
+                                selectedMatch.winnerId === selectedMatch.player2Id && styles.winnerScore
+                              ]}>
+                                {selectedMatch.score?.player2 ?? 0}
+                              </Text>
+                            </View>
+                          </View>
+                          {selectedMatch.winnerId && (
+                            <View style={styles.winnerBadge}>
+                              <Text style={styles.winnerText}>
+                                Winner: {selectedMatch.winnerId === selectedMatch.player1Id 
+                                  ? selectedMatch.player1Name 
+                                  : selectedMatch.player2Name}
+                              </Text>
+                            </View>
+                          )}
+                          {(selectedMatch.player1Points !== undefined || selectedMatch.player2Points !== undefined) && (
+                            <View style={styles.pointsSection}>
+                              <Text style={styles.pointsLabel}>Points Earned:</Text>
+                              <View style={styles.pointsRow}>
+                                <Text style={styles.pointsText}>
+                                  {selectedMatch.player1Name}: {selectedMatch.player1Points?.toFixed(1) ?? '0.0'}
+                                </Text>
+                                <Text style={styles.pointsText}>
+                                  {selectedMatch.player2Name}: {selectedMatch.player2Points?.toFixed(1) ?? '0.0'}
+                                </Text>
+                              </View>
+                            </View>
+                          )}
                         </View>
 
-                        <Text style={styles.modalVsText}>VS</Text>
-
-                        <View style={styles.playerScoreSection}>
-                          <Text style={[
-                            styles.modalPlayerName,
-                            selectedMatch.player2Id === currentUserId && styles.modalCurrentUser
-                          ]}>
-                            {selectedMatch.player2Name}
-                            {selectedMatch.player2Id === currentUserId && ' (You)'}
-                          </Text>
-                          <TextInput
-                            style={styles.scoreInput}
-                            placeholder="Racks won"
-                            keyboardType="number-pad"
-                            value={player2Score}
-                            onChangeText={setPlayer2Score}
-                          />
+                        <View style={styles.modalButtons}>
+                          <TouchableOpacity
+                            style={[
+                              styles.modalButton,
+                              styles.reportButton,
+                              hasExistingReport && styles.reportButtonDisabled
+                            ]}
+                            onPress={handleReportIssue}
+                            disabled={hasExistingReport}
+                          >
+                            <Flag color={hasExistingReport ? "#9CA3AF" : "#EF4444"} size={16} />
+                            <Text style={[
+                              styles.reportButtonText,
+                              hasExistingReport && styles.reportButtonTextDisabled
+                            ]}>
+                              {hasExistingReport ? 'Report in Review' : 'Report Issue'}
+                            </Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={[styles.modalButton, styles.cancelButton]}
+                            onPress={() => setModalVisible(false)}
+                          >
+                            <Text style={styles.cancelButtonText}>Close</Text>
+                          </TouchableOpacity>
                         </View>
-                      </View>
-                    </View>
+                      </>
+                    ) : (
+                      <>
+                        {/* Score Reporting Section for Planned Matches */}
+                        <View style={styles.scoreSection}>
+                          <Text style={styles.sectionTitle}>Report Score</Text>
+                          <View style={styles.scoreInputContainer}>
+                            <View style={styles.playerScoreSection}>
+                              <Text style={[
+                                styles.modalPlayerName,
+                                selectedMatch.player1Id === currentUserId && styles.modalCurrentUser
+                              ]}>
+                                {selectedMatch.player1Name}
+                                {selectedMatch.player1Id === currentUserId && ' (You)'}
+                              </Text>
+                              <TextInput
+                                style={styles.scoreInput}
+                                placeholder="Racks won"
+                                keyboardType="number-pad"
+                                value={player1Score}
+                                onChangeText={(text) => {
+                                  // Only allow numeric input
+                                  const numericValue = text.replace(/[^0-9]/g, '');
+                                  setPlayer1Score(numericValue);
+                                }}
+                              />
+                            </View>
 
-                    <View style={styles.modalButtons}>
-                      <TouchableOpacity
-                        style={[styles.modalButton, styles.cancelButton]}
-                        onPress={() => setModalVisible(false)}
-                      >
-                        <Text style={styles.cancelButtonText}>Close</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={[styles.modalButton, styles.submitButton]}
-                        onPress={handleSubmitScore}
-                        disabled={submitting}
-                      >
-                        <Text style={styles.submitButtonText}>
-                          {submitting ? 'Submitting...' : 'Submit Score'}
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
+                            <Text style={styles.modalVsText}>VS</Text>
+
+                            <View style={styles.playerScoreSection}>
+                              <Text style={[
+                                styles.modalPlayerName,
+                                selectedMatch.player2Id === currentUserId && styles.modalCurrentUser
+                              ]}>
+                                {selectedMatch.player2Name}
+                                {selectedMatch.player2Id === currentUserId && ' (You)'}
+                              </Text>
+                              <TextInput
+                                style={styles.scoreInput}
+                                placeholder="Racks won"
+                                keyboardType="number-pad"
+                                value={player2Score}
+                                onChangeText={(text) => {
+                                  // Only allow numeric input
+                                  const numericValue = text.replace(/[^0-9]/g, '');
+                                  setPlayer2Score(numericValue);
+                                }}
+                              />
+                            </View>
+                          </View>
+                        </View>
+
+                        <View style={styles.modalButtons}>
+                          <TouchableOpacity
+                            style={[styles.modalButton, styles.cancelButton]}
+                            onPress={() => setModalVisible(false)}
+                          >
+                            <Text style={styles.cancelButtonText}>Close</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={[styles.modalButton, styles.submitButton]}
+                            onPress={handleSubmitScore}
+                            disabled={submitting}
+                          >
+                            <Text style={styles.submitButtonText}>
+                              {submitting ? 'Submitting...' : 'Submit Score'}
+                            </Text>
+                          </TouchableOpacity>
+                        </View>
+                      </>
+                    )}
                   </>
                 ) : (
                   <Text style={styles.errorText}>Unable to load match details</Text>
                 )}
               </ScrollView>
             )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* Report Issue Modal */}
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={reportModalVisible}
+        onRequestClose={() => setReportModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Report Match Issue</Text>
+              <TouchableOpacity
+                onPress={() => setReportModalVisible(false)}
+                style={styles.closeButton}
+              >
+                <X color="#6B7280" size={24} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.modalScrollView} showsVerticalScrollIndicator={false}>
+              <View style={styles.reportSection}>
+                <Text style={styles.reportLabel}>
+                  Please describe the issue with this match:
+                </Text>
+                <TextInput
+                  style={styles.reportTextInput}
+                  placeholder="Enter details about the issue..."
+                  multiline
+                  numberOfLines={6}
+                  value={reportMessage}
+                  onChangeText={setReportMessage}
+                  textAlignVertical="top"
+                />
+                <Text style={styles.reportHint}>
+                  Your report will be reviewed by an admin. Please provide as much detail as possible.
+                </Text>
+              </View>
+
+              <View style={styles.modalButtons}>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.cancelButton]}
+                  onPress={() => {
+                    setReportModalVisible(false);
+                    setReportMessage('');
+                  }}
+                >
+                  <Text style={styles.cancelButtonText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.submitButton]}
+                  onPress={handleSubmitReport}
+                  disabled={submittingReport}
+                >
+                  <Text style={styles.submitButtonText}>
+                    {submittingReport ? 'Submitting...' : 'Submit Report'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
           </View>
         </View>
       </Modal>
@@ -603,12 +926,29 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 2,
   },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+    gap: 16,
+  },
   cardTitle: {
     fontSize: 16,
     fontWeight: 'bold',
     color: '#1F2937',
     letterSpacing: 0.5,
-    marginBottom: 16,
+  },
+  historyButton: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    backgroundColor: '#F3F4F6',
+    borderRadius: 6,
+  },
+  historyButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#7C3AED',
   },
   standingsTable: {
     gap: 8,
@@ -922,5 +1262,130 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 16,
     fontWeight: '600',
+  },
+  reportButton: {
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FEE2E2',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  reportButtonText: {
+    color: '#EF4444',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  reportButtonDisabled: {
+    backgroundColor: '#F3F4F6',
+    borderColor: '#E5E7EB',
+  },
+  reportButtonTextDisabled: {
+    color: '#9CA3AF',
+  },
+  reportSection: {
+    marginBottom: 20,
+  },
+  reportLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 12,
+  },
+  reportTextInput: {
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 14,
+    color: '#1F2937',
+    backgroundColor: 'white',
+    minHeight: 120,
+    textAlignVertical: 'top',
+  },
+  reportHint: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginTop: 8,
+    fontStyle: 'italic',
+  },
+  matchHistoryContent: {
+    flex: 1,
+  },
+  matchResult: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginTop: 4,
+  },
+  matchWin: {
+    color: '#10B981',
+  },
+  matchLoss: {
+    color: '#EF4444',
+  },
+  completedScoreContainer: {
+    gap: 12,
+    marginBottom: 16,
+  },
+  completedScorePlayer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  completedScoreName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1F2937',
+    flex: 1,
+  },
+  completedScoreValue: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#1F2937',
+  },
+  winnerScore: {
+    color: '#10B981',
+  },
+  winnerBadge: {
+    backgroundColor: '#ECFDF5',
+    borderRadius: 8,
+    padding: 12,
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: '#10B981',
+  },
+  winnerText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#10B981',
+    textAlign: 'center',
+  },
+  pointsSection: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+  },
+  pointsLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#6B7280',
+    textTransform: 'uppercase',
+    marginBottom: 8,
+  },
+  pointsRow: {
+    gap: 8,
+  },
+  pointsText: {
+    fontSize: 14,
+    color: '#1F2937',
+    fontWeight: '500',
   },
 });

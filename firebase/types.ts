@@ -99,3 +99,18 @@ export interface Season {
   pendingPlayerIds: string[]; // Array of user IDs pending admin approval
   createdAt: Timestamp;
 }
+
+// Match Report types
+export type ReportStatus = 'pending' | 'resolved';
+
+export interface MatchReport {
+  id: string;
+  matchId: string;
+  reportedBy: string; // User ID of the person reporting
+  reportedByName: string; // Name of the person reporting
+  message: string; // User's description of the issue
+  status: ReportStatus;
+  resolvedBy?: string; // Admin user ID who resolved it
+  resolvedAt?: Timestamp;
+  createdAt: Timestamp;
+}

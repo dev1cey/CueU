@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Calendar, MapPin, Trophy, Bell, ChevronRight } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -8,6 +8,7 @@ import { useUpcomingEvents } from '../../hooks/useEvents';
 import { useActiveSeason } from '../../hooks/useSeasons';
 import { useAuth } from '../../contexts/AuthContext';
 import { useUpcomingMatches } from '../../hooks/useMatches';
+import { useState } from 'react';
 
 interface QuickStat {
   label: string;
@@ -18,18 +19,19 @@ interface QuickStat {
 export default function HomeTab() {
   // Fetch data from Firebase
   const router = useRouter();
-  const { season, loading: seasonLoading } = useActiveSeason();
-  const { players: topPlayers, loading: playersLoading } = useSeasonTopPlayers(
+  const [refreshing, setRefreshing] = useState(false);
+  const { season, loading: seasonLoading, refetch: refetchSeason } = useActiveSeason();
+  const { players: topPlayers, loading: playersLoading, refetch: refetchTopPlayers } = useSeasonTopPlayers(
     season?.playerIds || null, 
     3,
     season?.id
   );
-  const { events, loading: eventsLoading } = useUpcomingEvents();
+  const { events, loading: eventsLoading, refetch: refetchEvents } = useUpcomingEvents();
   const { currentUser, currentUserId } = useAuth();
-  const { matches: upcomingMatches, loading: matchesLoading } = useUpcomingMatches(currentUserId || undefined);
+  const { matches: upcomingMatches, loading: matchesLoading, refetch: refetchMatches } = useUpcomingMatches(currentUserId || undefined);
 
   // Fetch all season players to calculate rank
-  const { players: allPlayers, loading: allPlayersLoading } = useSeasonTopPlayers(
+  const { players: allPlayers, loading: allPlayersLoading, refetch: refetchAllPlayers } = useSeasonTopPlayers(
     season?.playerIds || null,
     undefined,
     season?.id
@@ -73,6 +75,21 @@ export default function HomeTab() {
     return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
   };
 
+  const onRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await Promise.all([
+        refetchSeason(),
+        refetchTopPlayers(),
+        refetchAllPlayers(),
+        refetchEvents(),
+        refetchMatches(),
+      ]);
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container} edges={[]}>
       {/* Header */}
@@ -93,7 +110,13 @@ export default function HomeTab() {
         </View>
       </View>
 
-      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
+      <ScrollView 
+        style={styles.scrollView} 
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+      >
         {/* Welcome Section */}
         <View style={styles.welcomeSection}>
           <Text style={styles.sectionTitle}>Dashboard</Text>
