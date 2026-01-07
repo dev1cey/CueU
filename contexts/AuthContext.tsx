@@ -22,6 +22,7 @@ interface AuthContextType {
   login: (userId: string) => Promise<void>;
   logout: () => Promise<void>;
   checkUserExists: (email: string) => Promise<User | null>;
+  switchUser: (userId: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -125,6 +126,25 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
+  const switchUser = async (userId: string) => {
+    try {
+      setLoading(true);
+      const user = await getUserById(userId);
+      if (user) {
+        setCurrentUser(user);
+        setCurrentUserId(userId);
+        await AsyncStorage.setItem(USER_STORAGE_KEY, userId);
+      } else {
+        throw new Error('User not found');
+      }
+    } catch (error) {
+      console.error('Error switching user:', error);
+      throw error;
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -136,6 +156,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         login,
         logout,
         checkUserExists,
+        switchUser,
       }}
     >
       {children}

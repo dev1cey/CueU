@@ -1,16 +1,46 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, Alert, Modal, Pressable, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { User, Bell, LogOut, ChevronRight } from 'lucide-react-native';
-import { useState } from 'react';
+import { User, Bell, LogOut, ChevronRight, ChevronDown } from 'lucide-react-native';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
 import { CommonActions, useNavigation } from '@react-navigation/native';
+import { getAllUsers } from '../../firebase/services';
+import { User as UserType } from '../../firebase/types';
 
 export default function SettingsTab() {
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+  const [showUserPicker, setShowUserPicker] = useState(false);
+  const [allUsers, setAllUsers] = useState<UserType[]>([]);
+  const [loadingUsers, setLoadingUsers] = useState(false);
   const router = useRouter();
-  const { currentUser, logout } = useAuth();
+  const { currentUser, logout, switchUser } = useAuth();
   const navigation = useNavigation();
+
+  // Check if current user is a test user (email contains 'test' or name contains 'test')
+  const isTestUser = currentUser && (
+    currentUser.email.toLowerCase().includes('test') || 
+    currentUser.name.toLowerCase().includes('test')
+  );
+
+  // Fetch all users when component mounts if user is a test user
+  useEffect(() => {
+    if (isTestUser) {
+      fetchAllUsers();
+    }
+  }, [isTestUser]);
+
+  const fetchAllUsers = async () => {
+    try {
+      setLoadingUsers(true);
+      const users = await getAllUsers();
+      setAllUsers(users);
+    } catch (error) {
+      console.error('Error fetching users:', error);
+    } finally {
+      setLoadingUsers(false);
+    }
+  };
 
   const handleLogout = async () => {
     Alert.alert(
@@ -38,6 +68,17 @@ export default function SettingsTab() {
         },
       ]
     );
+  };
+
+  const handleUserSwitch = async (userId: string) => {
+    try {
+      setShowUserPicker(false);
+      await switchUser(userId);
+      Alert.alert('Success', 'Switched user successfully!');
+    } catch (error) {
+      console.error('Error switching user:', error);
+      Alert.alert('Error', 'Failed to switch user. Please try again.');
+    }
   };
 
   return (
@@ -84,6 +125,35 @@ export default function SettingsTab() {
           </View>
         </View>
 
+        {/* Test User Switcher Section */}
+        {isTestUser && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>TEST MODE</Text>
+            <View style={styles.card}>
+              <TouchableOpacity 
+                style={styles.menuItem}
+                onPress={() => setShowUserPicker(true)}
+                disabled={loadingUsers}
+              >
+                <View style={styles.menuItemLeft}>
+                  <User color="#F59E0B" size={20} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.menuItemTitle}>Switch User</Text>
+                    <Text style={styles.menuItemSubtitle}>
+                      {currentUser ? `Currently: ${currentUser.name}` : 'Select a user'}
+                    </Text>
+                  </View>
+                </View>
+                {loadingUsers ? (
+                  <ActivityIndicator size="small" color="#7C3AED" />
+                ) : (
+                  <ChevronDown color="#9CA3AF" size={20} />
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
         {/* Preferences Section */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>PREFERENCES</Text>
@@ -111,6 +181,49 @@ export default function SettingsTab() {
 
         <Text style={styles.version}>Version 1.0.0</Text>
       </ScrollView>
+
+      {/* User Picker Modal */}
+      <Modal
+        visible={showUserPicker}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowUserPicker(false)}
+      >
+        <Pressable 
+          style={styles.modalOverlay}
+          onPress={() => setShowUserPicker(false)}
+        >
+          <Pressable style={styles.modalContent} onPress={(e) => e.stopPropagation()}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Switch User</Text>
+              <TouchableOpacity onPress={() => setShowUserPicker(false)}>
+                <Text style={styles.modalClose}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            
+            <ScrollView style={styles.userList}>
+              {allUsers
+                .filter(user => user.id !== currentUser?.id) // Exclude current user
+                .map((user) => (
+                  <TouchableOpacity
+                    key={user.id}
+                    style={styles.userItem}
+                    onPress={() => handleUserSwitch(user.id)}
+                  >
+                    <View style={styles.userItemContent}>
+                      <Text style={styles.userItemName}>{user.name}</Text>
+                      <Text style={styles.userItemEmail}>{user.email}</Text>
+                      <Text style={styles.userItemSkill}>
+                        {user.skillLevel} • {user.matchesPlayed} matches
+                      </Text>
+                    </View>
+                    <ChevronRight color="#9CA3AF" size={20} />
+                  </TouchableOpacity>
+                ))}
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -253,5 +366,67 @@ const styles = StyleSheet.create({
     color: '#9CA3AF',
     marginTop: 24,
     marginBottom: 32,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: 'white',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '80%',
+    paddingBottom: 40,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#1F2937',
+  },
+  modalClose: {
+    fontSize: 24,
+    color: '#6B7280',
+    fontWeight: '300',
+  },
+  userList: {
+    padding: 16,
+  },
+  userItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 12,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  userItemContent: {
+    flex: 1,
+  },
+  userItemName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 4,
+  },
+  userItemEmail: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginBottom: 4,
+  },
+  userItemSkill: {
+    fontSize: 12,
+    color: '#9CA3AF',
   },
 });
