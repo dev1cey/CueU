@@ -2,10 +2,12 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Calendar, MapPin, Trophy, Bell, ChevronRight } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useRouter } from 'expo-router';
 import { useSeasonTopPlayers } from '../../hooks/useUsers';
 import { useUpcomingEvents } from '../../hooks/useEvents';
 import { useActiveSeason } from '../../hooks/useSeasons';
 import { useAuth } from '../../contexts/AuthContext';
+import { useUpcomingMatches } from '../../hooks/useMatches';
 
 interface QuickStat {
   label: string;
@@ -15,6 +17,7 @@ interface QuickStat {
 
 export default function HomeTab() {
   // Fetch data from Firebase
+  const router = useRouter();
   const { season, loading: seasonLoading } = useActiveSeason();
   const { players: topPlayers, loading: playersLoading } = useSeasonTopPlayers(
     season?.playerIds || null, 
@@ -22,7 +25,8 @@ export default function HomeTab() {
     season?.id
   );
   const { events, loading: eventsLoading } = useUpcomingEvents();
-  const { currentUser } = useAuth();
+  const { currentUser, currentUserId } = useAuth();
+  const { matches: upcomingMatches, loading: matchesLoading } = useUpcomingMatches(currentUserId || undefined);
 
   // Fetch all season players to calculate rank
   const { players: allPlayers, loading: allPlayersLoading } = useSeasonTopPlayers(
@@ -98,16 +102,69 @@ export default function HomeTab() {
           </Text>
         </View>
 
-        {/* Upcoming Matches Notice */}
-        <View style={styles.matchNoticeCard}>
-          <Calendar color="#7C3AED" size={48} style={styles.matchIcon} />
-          <Text style={styles.matchNoticeTitle}>No Upcoming Matches</Text>
-          <Text style={styles.matchNoticeText}>
-            Your next league match will be scheduled soon
-          </Text>
-          <TouchableOpacity style={styles.outlineButton}>
-            <Text style={styles.outlineButtonText}>View League Schedule</Text>
-          </TouchableOpacity>
+        {/* Upcoming Matches */}
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <Text style={styles.cardTitle}>UPCOMING MATCHES</Text>
+            <TouchableOpacity
+              style={styles.viewAllButton}
+              onPress={() => router.push('/(tabs)/league')}
+            >
+              <Text style={styles.viewAllText}>View Schedule</Text>
+              <ChevronRight color="#7C3AED" size={16} />
+            </TouchableOpacity>
+          </View>
+
+          {!currentUserId ? (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyStateText}>Sign in to see your matches</Text>
+              <Text style={styles.emptyStateSubtext}>
+                Log in with your UW account to view your league schedule.
+              </Text>
+            </View>
+          ) : matchesLoading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#7C3AED" />
+              <Text style={styles.loadingText}>Loading matches...</Text>
+            </View>
+          ) : upcomingMatches.length > 0 ? (
+            <View style={styles.eventsList}>
+              {upcomingMatches.slice(0, 3).map((match) => {
+                const isPlayer1 = match.player1Id === currentUserId;
+                const opponentName = isPlayer1 ? match.player2Name : match.player1Name;
+                const scheduledDate: any = (match as any).scheduledDate;
+
+                return (
+                  <View key={match.id} style={styles.eventItem}>
+                    <View style={styles.eventIconContainer}>
+                      <Trophy color="#7C3AED" size={20} />
+                    </View>
+                    <View style={styles.eventInfo}>
+                      <Text style={styles.eventTitle}>vs {opponentName}</Text>
+                      {scheduledDate && (
+                        <View style={styles.eventDetails}>
+                          <Calendar color="#6B7280" size={12} />
+                          <Text style={styles.eventDetailText}>
+                            {formatEventDate(scheduledDate)}, {formatEventTime(scheduledDate)}
+                          </Text>
+                        </View>
+                      )}
+                      <View style={styles.eventDetails}>
+                        <Text style={styles.eventDetailText}>Week {match.weekNumber}</Text>
+                      </View>
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+          ) : (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyStateText}>No upcoming matches</Text>
+              <Text style={styles.emptyStateSubtext}>
+                Your next league match will be scheduled soon.
+              </Text>
+            </View>
+          )}
         </View>
 
         {/* Quick Stats Section */}

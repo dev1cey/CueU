@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert, Modal, TextInput } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert, Modal, TextInput, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Trophy, Calendar, Users, X } from 'lucide-react-native';
 import { useActiveSeason } from '../../hooks/useSeasons';
@@ -11,8 +11,10 @@ import { Match, User } from '../../firebase/types';
 import { getRacksNeeded } from '../../firebase/utils/handicapUtils';
 
 export default function LeagueTab() {
+  const [refreshing, setRefreshing] = useState(false);
+
   const { season, loading: seasonLoading, refetch: refetchSeason } = useActiveSeason();
-  const { players, loading: playersLoading } = useSeasonTopPlayers(
+  const { players, loading: playersLoading, refetch: refetchPlayers } = useSeasonTopPlayers(
     season?.playerIds || null,
     undefined,
     season?.id
@@ -146,6 +148,19 @@ export default function LeagueTab() {
     }
   };
 
+  const onRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await Promise.all([
+        refetchSeason(),
+        refetchPlayers(),
+        refetchMatches(),
+      ]);
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container} edges={[]}>
       {/* Header */}
@@ -163,7 +178,13 @@ export default function LeagueTab() {
         </View>
       </View>
 
-      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+      >
         <View style={styles.titleSection}>
           <Text style={styles.pageTitle}>League</Text>
           <Text style={styles.pageSubtitle}>
@@ -332,39 +353,38 @@ export default function LeagueTab() {
                   <>
                     {/* Match Handicap Info */}
                     <View style={styles.handicapSection}>
-                      <Text style={styles.sectionTitle}>Match Format (APA Handicap)</Text>
-                      <View style={styles.handicapGrid}>
-                        <View style={styles.handicapCard}>
-                          <Text style={[
-                            styles.handicapPlayerName,
-                            selectedMatch.player1Id === currentUserId && styles.modalCurrentUser
-                          ]}>
-                            {selectedMatch.player1Name}
-                            {selectedMatch.player1Id === currentUserId && ' (You)'}
-                          </Text>
-                          <Text style={styles.handicapSkillLevel}>
-                            Skill Level: {player1Data.skillLevelNum}
-                          </Text>
-                          <Text style={styles.handicapRacks}>
-                            Needs {getRacksNeeded(player1Data.skillLevelNum, player2Data.skillLevelNum).player1} racks to win
-                          </Text>
-                        </View>
-                        <View style={styles.handicapCard}>
-                          <Text style={[
-                            styles.handicapPlayerName,
-                            selectedMatch.player2Id === currentUserId && styles.modalCurrentUser
-                          ]}>
-                            {selectedMatch.player2Name}
-                            {selectedMatch.player2Id === currentUserId && ' (You)'}
-                          </Text>
-                          <Text style={styles.handicapSkillLevel}>
-                            Skill Level: {player2Data.skillLevelNum}
-                          </Text>
-                          <Text style={styles.handicapRacks}>
-                            Needs {getRacksNeeded(player1Data.skillLevelNum, player2Data.skillLevelNum).player2} racks to win
-                          </Text>
-                        </View>
-                      </View>
+                      <Text style={styles.sectionTitle}>Match Format</Text>
+                      {(() => {
+                        const racksNeeded = getRacksNeeded(
+                          player1Data.skillLevelNum,
+                          player2Data.skillLevelNum
+                        );
+                        const isPlayer1CurrentUser = selectedMatch.player1Id === currentUserId;
+                        const opponentName = isPlayer1CurrentUser
+                          ? selectedMatch.player2Name
+                          : selectedMatch.player1Name;
+                        const opponentSkillLevel = isPlayer1CurrentUser
+                          ? player2Data.skillLevelNum
+                          : player1Data.skillLevelNum;
+                        const currentUserRacks = isPlayer1CurrentUser
+                          ? racksNeeded.player1
+                          : racksNeeded.player2;
+                        const opponentRacks = isPlayer1CurrentUser
+                          ? racksNeeded.player2
+                          : racksNeeded.player1;
+
+                        return (
+                          <View style={styles.handicapCard}>
+                            <Text style={styles.handicapPlayerName}>
+                              Opponent: {opponentName} (Skill Level {opponentSkillLevel})
+                            </Text>
+
+                            <Text style={styles.handicapRacks}>
+                              Racks to win — You: {currentUserRacks}   |   {opponentName}: {opponentRacks}
+                            </Text>
+                          </View>
+                        );
+                      })()}
                     </View>
 
                     {/* Opponent Contact Info */}

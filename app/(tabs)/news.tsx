@@ -1,5 +1,5 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Modal } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAllNews } from '../../hooks/useNews';
 import { News } from '../../firebase/types';
 import { useState } from 'react';
@@ -19,32 +19,15 @@ export default function NewsTab() {
   const { news, loading, error, refetch } = useAllNews();
   const [selectedNews, setSelectedNews] = useState<News | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
-  const insets = useSafeAreaInsets();
-  
-  // #region agent log
-  fetch('http://127.0.0.1:7243/ingest/5fc0dea6-b80b-4340-9629-d3f8909bf767',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'news.tsx:18',message:'Component rendered with insets',data:{insetsTop:insets.top,insetsBottom:insets.bottom,modalVisible:modalVisible},timestamp:Date.now(),sessionId:'debug-session',runId:'initial',hypothesisId:'A,B,E'})}).catch(()=>{});
-  // #endregion
 
   const handleNewsPress = (newsItem: News) => {
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/5fc0dea6-b80b-4340-9629-d3f8909bf767',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'news.tsx:23',message:'handleNewsPress called',data:{newsId:newsItem.id,newsTitle:newsItem.title},timestamp:Date.now(),sessionId:'debug-session',runId:'initial',hypothesisId:'C'})}).catch(()=>{});
-    // #endregion
     setSelectedNews(newsItem);
     setModalVisible(true);
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/5fc0dea6-b80b-4340-9629-d3f8909bf767',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'news.tsx:26',message:'Modal state updated',data:{modalVisible:true,hasSelectedNews:!!newsItem},timestamp:Date.now(),sessionId:'debug-session',runId:'initial',hypothesisId:'C'})}).catch(()=>{});
-    // #endregion
   };
 
   const closeModal = () => {
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/5fc0dea6-b80b-4340-9629-d3f8909bf767',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'news.tsx:28',message:'closeModal called',data:{currentModalVisible:modalVisible,currentSelectedNews:selectedNews?.id},timestamp:Date.now(),sessionId:'debug-session',runId:'initial',hypothesisId:'C'})}).catch(()=>{});
-    // #endregion
     setModalVisible(false);
     setSelectedNews(null);
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/5fc0dea6-b80b-4340-9629-d3f8909bf767',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'news.tsx:31',message:'Modal closed state set',data:{modalVisible:false,selectedNews:null},timestamp:Date.now(),sessionId:'debug-session',runId:'initial',hypothesisId:'C'})}).catch(()=>{});
-    // #endregion
   };
 
   return (
@@ -125,18 +108,9 @@ export default function NewsTab() {
         visible={modalVisible}
         onRequestClose={closeModal}
       >
-        <View style={styles.modalContainer}>
-          <View style={[styles.modalHeader, { paddingTop: insets.top + 12 }]}>
-            <TouchableOpacity 
-              style={styles.backButton} 
-              onPress={() => {
-                // #region agent log
-                fetch('http://127.0.0.1:7243/ingest/5fc0dea6-b80b-4340-9629-d3f8909bf767',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'news.tsx:113',message:'Back button pressed',data:{timestamp:Date.now()},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'D'})}).catch(()=>{});
-                // #endregion
-                closeModal();
-              }}
-              hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
-            >
+        <SafeAreaView style={styles.modalContainer} edges={['top']}>
+          <View style={styles.modalHeader}>
+            <TouchableOpacity style={styles.backButton} onPress={closeModal}>
               <Text style={styles.backButtonText}>← Back</Text>
             </TouchableOpacity>
           </View>
@@ -162,7 +136,7 @@ export default function NewsTab() {
               </>
             )}
           </ScrollView>
-        </View>
+        </SafeAreaView>
       </Modal>
     </SafeAreaView>
   );
@@ -357,18 +331,18 @@ const styles = StyleSheet.create({
     backgroundColor: '#F9FAFB',
   },
   modalHeader: {
-    backgroundColor: 'white',
+    backgroundColor: '#7C3AED',
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: 'rgba(252, 211, 77, 0.3)',
   },
   backButton: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   backButtonText: {
-    color: '#7C3AED',
+    color: 'white',
     fontSize: 16,
     fontWeight: '600',
   },
