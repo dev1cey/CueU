@@ -8,7 +8,8 @@ import { useUpcomingEvents } from '../../hooks/useEvents';
 import { useActiveSeason } from '../../hooks/useSeasons';
 import { useAuth } from '../../contexts/AuthContext';
 import { useUpcomingMatches } from '../../hooks/useMatches';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { getUnreadNotificationCount } from '../../firebase/services/notificationService';
 
 interface QuickStat {
   label: string;
@@ -29,6 +30,7 @@ export default function HomeTab() {
   const { events, loading: eventsLoading, refetch: refetchEvents } = useUpcomingEvents();
   const { currentUser, currentUserId } = useAuth();
   const { matches: upcomingMatches, loading: matchesLoading, refetch: refetchMatches } = useUpcomingMatches(currentUserId || undefined);
+  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
 
   // Fetch all season players to calculate rank
   const { players: allPlayers, loading: allPlayersLoading, refetch: refetchAllPlayers } = useSeasonTopPlayers(
@@ -75,6 +77,23 @@ export default function HomeTab() {
     return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
   };
 
+  // Load unread notification count
+  useEffect(() => {
+    if (currentUserId) {
+      loadUnreadCount();
+    }
+  }, [currentUserId]);
+
+  const loadUnreadCount = async () => {
+    if (!currentUserId) return;
+    try {
+      const count = await getUnreadNotificationCount(currentUserId);
+      setUnreadNotificationCount(count);
+    } catch (error) {
+      console.error('Error loading unread count:', error);
+    }
+  };
+
   const onRefresh = async () => {
     setRefreshing(true);
     try {
@@ -84,6 +103,7 @@ export default function HomeTab() {
         refetchAllPlayers(),
         refetchEvents(),
         refetchMatches(),
+        loadUnreadCount(),
       ]);
     } finally {
       setRefreshing(false);
@@ -104,8 +124,18 @@ export default function HomeTab() {
               <Text style={styles.headerSubtitle}> - UW Pool Club</Text>
             </View>
           </View>
-          <TouchableOpacity style={styles.notificationButton}>
+          <TouchableOpacity 
+            style={styles.notificationButton}
+            onPress={() => router.push('/notifications')}
+          >
             <Bell color="#7C3AED" size={24} />
+            {unreadNotificationCount > 0 && (
+              <View style={styles.badge}>
+                <Text style={styles.badgeText}>
+                  {unreadNotificationCount > 99 ? '99+' : unreadNotificationCount}
+                </Text>
+              </View>
+            )}
           </TouchableOpacity>
         </View>
       </View>
@@ -357,6 +387,24 @@ const styles = StyleSheet.create({
   },
   notificationButton: {
     padding: 8,
+    position: 'relative',
+  },
+  badge: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    backgroundColor: '#EF4444',
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 6,
+  },
+  badgeText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
   },
   scrollView: {
     flex: 1,

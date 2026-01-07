@@ -13,6 +13,8 @@ import {
 } from 'firebase/firestore';
 import { db } from '../config';
 import { News } from '../types';
+import { notifyNewsReleased } from './notificationService';
+import { getAllUsers } from './userService';
 
 const NEWS_COLLECTION = 'news';
 
@@ -43,6 +45,16 @@ export const createNews = async (newsData: {
     };
 
     const docRef = await addDoc(newsRef, newNews);
+    
+    // Notify all users about the new news
+    try {
+      const users = await getAllUsers();
+      await notifyNewsReleased(docRef.id, newsData.title, users);
+    } catch (notificationError) {
+      // Don't fail news creation if notification fails
+      console.error('Error sending news notification:', notificationError);
+    }
+    
     return docRef.id;
   } catch (error) {
     console.error('Error creating news:', error);

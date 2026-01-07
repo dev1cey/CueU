@@ -7,6 +7,10 @@ import { useAuth } from '../../contexts/AuthContext';
 import { CommonActions, useNavigation } from '@react-navigation/native';
 import { getAllUsers } from '../../firebase/services';
 import { User as UserType } from '../../firebase/types';
+import { requestNotificationPermissions } from '../../firebase/services/notificationService';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+const NOTIFICATIONS_ENABLED_KEY = '@cueu:notifications_enabled';
 
 export default function SettingsTab() {
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
@@ -16,6 +20,44 @@ export default function SettingsTab() {
   const router = useRouter();
   const { currentUser, logout, switchUser } = useAuth();
   const navigation = useNavigation();
+
+  // Load notification preference on mount
+  useEffect(() => {
+    loadNotificationPreference();
+  }, []);
+
+  const loadNotificationPreference = async () => {
+    try {
+      const value = await AsyncStorage.getItem(NOTIFICATIONS_ENABLED_KEY);
+      if (value !== null) {
+        setNotificationsEnabled(value === 'true');
+      }
+    } catch (error) {
+      console.error('Error loading notification preference:', error);
+    }
+  };
+
+  const handleNotificationToggle = async (value: boolean) => {
+    try {
+      await AsyncStorage.setItem(NOTIFICATIONS_ENABLED_KEY, value.toString());
+      setNotificationsEnabled(value);
+      
+      if (value) {
+        // Request permissions when enabling
+        const granted = await requestNotificationPermissions();
+        if (!granted) {
+          Alert.alert(
+            'Permission Required',
+            'Please enable notifications in your device settings to receive notifications.',
+            [{ text: 'OK' }]
+          );
+        }
+      }
+    } catch (error) {
+      console.error('Error saving notification preference:', error);
+      Alert.alert('Error', 'Failed to update notification settings.');
+    }
+  };
 
   // Check if current user is a test user (email contains 'test' or name contains 'test')
   const isTestUser = currentUser && (
@@ -168,7 +210,7 @@ export default function SettingsTab() {
               </View>
               <Switch
                 value={notificationsEnabled}
-                onValueChange={setNotificationsEnabled}
+                onValueChange={handleNotificationToggle}
                 trackColor={{ false: '#D1D5DB', true: '#C4B5FD' }}
                 thumbColor={notificationsEnabled ? '#7C3AED' : '#F3F4F6'}
               />

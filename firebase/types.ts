@@ -114,3 +114,22 @@ export interface MatchReport {
   resolvedAt?: Timestamp;
   createdAt: Timestamp;
 }
+
+// Notification types
+export type NotificationType = 'match_scheduled' | 'news_released' | 'ranking_changed';
+
+export interface Notification {
+  id: string;
+  userId: string; // User who should receive this notification
+  type: NotificationType;
+  title: string;
+  message: string;
+  read: boolean;
+  // Optional data for navigation or additional context
+  matchId?: string; // For match_scheduled notifications
+  newsId?: string; // For news_released notifications
+  seasonId?: string; // For ranking_changed notifications
+  oldRank?: number; // For ranking_changed notifications
+  newRank?: number; // For ranking_changed notifications
+  createdAt: Timestamp;
+}

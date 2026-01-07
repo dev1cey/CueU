@@ -14,6 +14,8 @@ import { db } from '../config';
 import { Match, MatchStatus } from '../types';
 import { updateUserStats, updateUserSeasonPoints, getUserById } from './userService';
 import { getRacksNeeded, calculateMatchPoints } from '../utils/handicapUtils';
+import { notifyMatchScheduled } from './notificationService';
+import { getSeasonById } from './seasonService';
 
 const MATCHES_COLLECTION = 'matches';
 
@@ -45,6 +47,21 @@ export const createMatch = async (matchData: {
     }
 
     const docRef = await addDoc(matchesRef, newMatch);
+    
+    // Notify both players about the new match
+    try {
+      await notifyMatchScheduled(
+        matchData.player1Id,
+        matchData.player2Id,
+        docRef.id,
+        matchData.player1Name,
+        matchData.player2Name
+      );
+    } catch (notificationError) {
+      // Don't fail match creation if notification fails
+      console.error('Error sending match notification:', notificationError);
+    }
+    
     return docRef.id;
   } catch (error) {
     console.error('Error creating match:', error);
@@ -150,13 +167,17 @@ export const completeMatch = async (
       player2Points: Math.round(player2Points * 100) / 100,
     });
 
+    // Get season to access playerIds for ranking calculation
+    const season = await getSeasonById(match.seasonId);
+    const seasonPlayerIds = season?.playerIds || [];
+
     // Update player stats (wins/losses)
     await updateUserStats(match.player1Id, player1Won);
     await updateUserStats(match.player2Id, player2Won);
 
-    // Update season points
-    await updateUserSeasonPoints(match.player1Id, match.seasonId, player1Points);
-    await updateUserSeasonPoints(match.player2Id, match.seasonId, player2Points);
+    // Update season points (with ranking change detection)
+    await updateUserSeasonPoints(match.player1Id, match.seasonId, player1Points, seasonPlayerIds);
+    await updateUserSeasonPoints(match.player2Id, match.seasonId, player2Points, seasonPlayerIds);
   } catch (error) {
     console.error('Error completing match:', error);
     throw error;

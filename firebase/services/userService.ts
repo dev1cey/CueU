@@ -14,6 +14,7 @@ import {
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../config';
 import { User, SkillLevel } from '../types';
+import { notifyRankingChanged } from './notificationService';
 
 const USERS_COLLECTION = 'users';
 
@@ -241,11 +242,43 @@ export const updateUserStats = async (
   }
 };
 
+// Helper function to calculate user's rank in a season
+const calculateUserRank = async (
+  userId: string,
+  seasonId: string,
+  playerIds: string[]
+): Promise<number> => {
+  try {
+    if (playerIds.length === 0) return 1;
+    
+    // Fetch all players in the season
+    const playerPromises = playerIds.map(id => getUserById(id));
+    const players = await Promise.all(playerPromises);
+    
+    // Filter and sort by season points
+    const validPlayers = players
+      .filter((player): player is User => player !== null)
+      .map(user => {
+        const seasonPoints = user.seasonPoints?.[seasonId] || 0;
+        return { user, seasonPoints };
+      })
+      .sort((a, b) => b.seasonPoints - a.seasonPoints);
+    
+    // Find user's rank (1-indexed)
+    const userIndex = validPlayers.findIndex(p => p.user.id === userId);
+    return userIndex !== -1 ? userIndex + 1 : playerIds.length + 1;
+  } catch (error) {
+    console.error('Error calculating user rank:', error);
+    return 0;
+  }
+};
+
 // Update user season points
 export const updateUserSeasonPoints = async (
   userId: string,
   seasonId: string,
-  pointsToAdd: number
+  pointsToAdd: number,
+  seasonPlayerIds?: string[] // Optional: provide to enable ranking change detection
 ): Promise<void> => {
   try {
     const user = await getUserById(userId);
@@ -255,12 +288,31 @@ export const updateUserSeasonPoints = async (
     const currentPoints = currentSeasonPoints[seasonId] || 0;
     const newPoints = currentPoints + pointsToAdd;
 
+    // Calculate old rank if seasonPlayerIds provided
+    let oldRank: number | undefined;
+    if (seasonPlayerIds && seasonPlayerIds.length > 0) {
+      oldRank = await calculateUserRank(userId, seasonId, seasonPlayerIds);
+    }
+
     await updateUserProfile(userId, {
       seasonPoints: {
         ...currentSeasonPoints,
         [seasonId]: newPoints,
       },
     });
+
+    // Calculate new rank and notify if changed
+    if (seasonPlayerIds && seasonPlayerIds.length > 0 && oldRank) {
+      const newRank = await calculateUserRank(userId, seasonId, seasonPlayerIds);
+      if (oldRank !== newRank) {
+        try {
+          await notifyRankingChanged(userId, seasonId, oldRank, newRank);
+        } catch (notificationError) {
+          // Don't fail point update if notification fails
+          console.error('Error notifying about ranking change:', notificationError);
+        }
+      }
+    }
   } catch (error) {
     console.error('Error updating user season points:', error);
     throw error;
