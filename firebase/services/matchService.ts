@@ -12,7 +12,8 @@ import {
 } from 'firebase/firestore';
 import { db } from '../config';
 import { Match, MatchStatus } from '../types';
-import { updateUserStats } from './userService';
+import { updateUserStats, updateUserSeasonPoints, getUserById } from './userService';
+import { getRacksNeeded, calculateMatchPoints } from '../utils/handicapUtils';
 
 const MATCHES_COLLECTION = 'matches';
 
@@ -31,15 +32,17 @@ export const createMatch = async (matchData: {
     const now = Timestamp.now();
 
     // Extended match data with extra fields not in the base Match type
-    const newMatch = {
+    const newMatch: any = {
       ...matchData,
-      scheduledDate: matchData.scheduledDate
-        ? Timestamp.fromDate(matchData.scheduledDate)
-        : undefined,
       status: 'planned' as MatchStatus,
       createdAt: now,
       updatedAt: now,
     };
+    
+    // Only add scheduledDate if it's provided
+    if (matchData.scheduledDate) {
+      newMatch.scheduledDate = Timestamp.fromDate(matchData.scheduledDate);
+    }
 
     const docRef = await addDoc(matchesRef, newMatch);
     return docRef.id;
@@ -86,7 +89,7 @@ export const updateMatch = async (
   }
 };
 
-// Complete a match and update player stats
+// Complete a match and update player stats with APA handicap system
 export const completeMatch = async (
   matchId: string,
   winnerId: string,
@@ -96,17 +99,64 @@ export const completeMatch = async (
     const match = await getMatchById(matchId);
     if (!match) throw new Error('Match not found');
 
-    // Update match
+    // Get player data to determine skill levels
+    const player1 = await getUserById(match.player1Id);
+    const player2 = await getUserById(match.player2Id);
+    
+    if (!player1 || !player2) {
+      throw new Error('One or both players not found');
+    }
+
+    const player1SkillLevel = player1.skillLevelNum;
+    const player2SkillLevel = player2.skillLevelNum;
+
+    // Validate skill levels are in APA range (2-7)
+    if (player1SkillLevel < 2 || player1SkillLevel > 7 ||
+        player2SkillLevel < 2 || player2SkillLevel > 7) {
+      throw new Error(`Invalid skill levels: P1=${player1SkillLevel}, P2=${player2SkillLevel}. Must be between 2-7.`);
+    }
+
+    // Calculate racks needed based on handicap
+    const racksNeeded = getRacksNeeded(player1SkillLevel, player2SkillLevel);
+
+    // Determine winners
+    const player1Won = winnerId === match.player1Id;
+    const player2Won = winnerId === match.player2Id;
+
+    // Calculate points earned
+    const player1Points = calculateMatchPoints(
+      player1Won,
+      score.player1,
+      racksNeeded.player1
+    );
+
+    const player2Points = calculateMatchPoints(
+      player2Won,
+      score.player2,
+      racksNeeded.player2
+    );
+
+    // Update match with handicap data
     await updateMatch(matchId, {
       winnerId,
       score,
       status: 'completed',
       completedDate: Timestamp.now(),
+      player1SkillLevel,
+      player2SkillLevel,
+      player1RacksNeeded: racksNeeded.player1,
+      player2RacksNeeded: racksNeeded.player2,
+      player1Points: Math.round(player1Points * 100) / 100, // Round to 2 decimals
+      player2Points: Math.round(player2Points * 100) / 100,
     });
 
-    // Update player stats
-    await updateUserStats(match.player1Id, winnerId === match.player1Id);
-    await updateUserStats(match.player2Id, winnerId === match.player2Id);
+    // Update player stats (wins/losses)
+    await updateUserStats(match.player1Id, player1Won);
+    await updateUserStats(match.player2Id, player2Won);
+
+    // Update season points
+    await updateUserSeasonPoints(match.player1Id, match.seasonId, player1Points);
+    await updateUserSeasonPoints(match.player2Id, match.seasonId, player2Points);
   } catch (error) {
     console.error('Error completing match:', error);
     throw error;

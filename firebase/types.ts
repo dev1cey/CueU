@@ -1,7 +1,9 @@
 import { Timestamp } from 'firebase/firestore';
 
 // User types
+// APA skill levels range from 2-7
 export type SkillLevel = 'beginner' | 'intermediate' | 'advanced' | 'expert';
+// Note: skillLevelNum should be 2-7 for APA system (not 1-4)
 
 export interface User {
   // Basic Info
@@ -15,11 +17,13 @@ export interface User {
   profileImageUrl?: string;
   // Pool Info
   skillLevel: SkillLevel;
-  skillLevelNum: number;
+  skillLevelNum: number; // APA skill level: 2-7
   wins: number;
   losses: number;
   matchesPlayed: number;
   matchHistory: string[]; // Array of Match IDs
+  // Season scoring (map of seasonId -> points earned in that season)
+  seasonPoints?: Record<string, number>; // Points accumulated per season
   // System Notes
   createdAt: Timestamp;
 }
@@ -35,10 +39,19 @@ export interface Match {
   winnerId?: string;
   seasonId: string;
   weekNumber: number;
+  // Match score (racks won by each player)
   score?: {
     player1: number;
     player2: number;
   };
+  // APA Handicap system fields
+  player1SkillLevel?: number; // Skill level at match time (2-7)
+  player2SkillLevel?: number; // Skill level at match time (2-7)
+  player1RacksNeeded?: number; // Racks needed to win based on handicap
+  player2RacksNeeded?: number; // Racks needed to win based on handicap
+  // Points earned from this match
+  player1Points?: number; // Points earned by player1 (0-10)
+  player2Points?: number; // Points earned by player2 (0-10)
   status: MatchStatus;
   createdAt: Timestamp;
 }

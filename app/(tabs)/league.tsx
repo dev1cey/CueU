@@ -1,17 +1,37 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert, Modal, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Trophy, Calendar, Users } from 'lucide-react-native';
+import { Trophy, Calendar, Users, X } from 'lucide-react-native';
 import { useActiveSeason } from '../../hooks/useSeasons';
 import { useSeasonTopPlayers } from '../../hooks/useUsers';
 import { useAuth } from '../../contexts/AuthContext';
-import { registerForSeason } from '../../firebase/services';
-import { useState } from 'react';
+import { registerForSeason, completeMatch, getUserById } from '../../firebase/services';
+import { useState, useEffect } from 'react';
+import { useUpcomingMatches } from '../../hooks/useMatches';
+import { Match, User } from '../../firebase/types';
+import { getRacksNeeded } from '../../firebase/utils/handicapUtils';
 
 export default function LeagueTab() {
   const { season, loading: seasonLoading, refetch: refetchSeason } = useActiveSeason();
-  const { players, loading: playersLoading } = useSeasonTopPlayers(season?.playerIds || null);
+  const { players, loading: playersLoading } = useSeasonTopPlayers(
+    season?.playerIds || null,
+    undefined,
+    season?.id
+  );
   const { currentUserId } = useAuth();
   const [registering, setRegistering] = useState(false);
+  const { matches: upcomingMatches, loading: matchesLoading, refetch: refetchMatches } = useUpcomingMatches(currentUserId || undefined);
+  
+  // Modal state for match details and score reporting
+  const [selectedMatch, setSelectedMatch] = useState<Match | null>(null);
+  const [modalVisible, setModalVisible] = useState(false);
+  const [player1Score, setPlayer1Score] = useState('');
+  const [player2Score, setPlayer2Score] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  
+  // State for match details (skill levels, racks needed, opponent info)
+  const [player1Data, setPlayer1Data] = useState<User | null>(null);
+  const [player2Data, setPlayer2Data] = useState<User | null>(null);
+  const [loadingMatchDetails, setLoadingMatchDetails] = useState(false);
 
   const loading = seasonLoading || playersLoading;
 
@@ -20,17 +40,20 @@ export default function LeagueTab() {
   const isPending = season && currentUserId ? season.pendingPlayerIds.includes(currentUserId) : false;
   const canRegister = season && currentUserId && !isEnrolled && !isPending;
 
-  // Calculate standings with win rate
-  const standings = players.map((player, index) => ({
-    rank: index + 1,
-    name: player.name,
-    wins: player.wins,
-    losses: player.losses,
-    winRate: player.matchesPlayed > 0 
-      ? `${Math.round((player.wins / player.matchesPlayed) * 100)}%`
-      : '-',
-    hasMatches: player.matchesPlayed > 0,
-  }));
+  // Calculate standings with season points (APA scoring system)
+  const standings = players.map((player, index) => {
+    const seasonPoints = season?.id 
+      ? (player.seasonPoints?.[season.id] || 0)
+      : 0;
+    return {
+      rank: index + 1,
+      name: player.name,
+      wins: player.wins,
+      losses: player.losses,
+      seasonPoints: seasonPoints,
+      hasMatches: player.matchesPlayed > 0,
+    };
+  });
 
   const handleRegister = async () => {
     if (!season || !currentUserId) return;
@@ -54,6 +77,72 @@ export default function LeagueTab() {
       );
     } finally {
       setRegistering(false);
+    }
+  };
+
+  const handleMatchClick = async (match: Match) => {
+    setSelectedMatch(match);
+    setPlayer1Score('');
+    setPlayer2Score('');
+    setModalVisible(true);
+    
+    // Load player details for the match
+    setLoadingMatchDetails(true);
+    try {
+      const [p1, p2] = await Promise.all([
+        getUserById(match.player1Id),
+        getUserById(match.player2Id),
+      ]);
+      setPlayer1Data(p1);
+      setPlayer2Data(p2);
+    } catch (error) {
+      console.error('Error loading match details:', error);
+    } finally {
+      setLoadingMatchDetails(false);
+    }
+  };
+
+  const handleSubmitScore = async () => {
+    if (!selectedMatch || !currentUserId) return;
+
+    const p1Score = parseInt(player1Score);
+    const p2Score = parseInt(player2Score);
+
+    // Validate scores
+    if (isNaN(p1Score) || isNaN(p2Score) || p1Score < 0 || p2Score < 0) {
+      Alert.alert('Invalid Score', 'Please enter valid scores for both players.');
+      return;
+    }
+
+    if (p1Score === p2Score) {
+      Alert.alert('Invalid Score', 'Matches cannot end in a tie. One player must win.');
+      return;
+    }
+
+    // Determine winner
+    const winnerId = p1Score > p2Score ? selectedMatch.player1Id : selectedMatch.player2Id;
+
+    try {
+      setSubmitting(true);
+      await completeMatch(selectedMatch.id, winnerId, {
+        player1: p1Score,
+        player2: p2Score,
+      });
+      
+      Alert.alert('Success', 'Match completed successfully!');
+      setModalVisible(false);
+      setSelectedMatch(null);
+      
+      // Refetch data
+      await Promise.all([refetchMatches(), refetchSeason()]);
+    } catch (error) {
+      console.error('Error completing match:', error);
+      Alert.alert(
+        'Error',
+        error instanceof Error ? error.message : 'Failed to complete match. Please try again.'
+      );
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -140,6 +229,36 @@ export default function LeagueTab() {
               </View>
             </View>
 
+            {/* Upcoming Matches */}
+            {isEnrolled && upcomingMatches.length > 0 && (
+              <View style={styles.card}>
+                <Text style={styles.cardTitle}>YOUR UPCOMING MATCHES</Text>
+                <View style={styles.matchesList}>
+                  {upcomingMatches.map((match) => {
+                    const opponentName = match.player1Id === currentUserId 
+                      ? match.player2Name 
+                      : match.player1Name;
+                    
+                    return (
+                      <TouchableOpacity
+                        key={match.id}
+                        style={styles.matchCardSimple}
+                        onPress={() => handleMatchClick(match)}
+                      >
+                        <View style={styles.matchSimpleContent}>
+                          <View>
+                            <Text style={styles.matchWeekSimple}>Week {match.weekNumber}</Text>
+                            <Text style={styles.opponentName}>vs {opponentName}</Text>
+                          </View>
+                          <Text style={styles.tapToView}>Tap to view →</Text>
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+            )}
+
             {/* Standings */}
             <View style={styles.card}>
               <Text style={styles.cardTitle}>STANDINGS</Text>
@@ -151,7 +270,7 @@ export default function LeagueTab() {
                     <Text style={[styles.tableHeaderText, { flex: 0.7 }]}>Rank</Text>
                     <Text style={[styles.tableHeaderText, { flex: 2 }]}>Player</Text>
                     <Text style={[styles.tableHeaderText, { flex: 1 }]}>W-L</Text>
-                    <Text style={[styles.tableHeaderText, { flex: 1 }]}>Win %</Text>
+                    <Text style={[styles.tableHeaderText, { flex: 1 }]}>Points</Text>
                   </View>
                   {standings.map((player) => (
                     <View key={player.rank} style={styles.tableRow}>
@@ -166,8 +285,8 @@ export default function LeagueTab() {
                       <Text style={[styles.tableCell, { flex: 1 }]}>
                         {player.hasMatches ? `${player.wins}-${player.losses}` : '-'}
                       </Text>
-                      <Text style={[styles.tableCell, { flex: 1 }]}>
-                        {player.winRate}
+                      <Text style={[styles.tableCell, { flex: 1, fontWeight: '600' }]}>
+                        {player.seasonPoints.toFixed(1)}
                       </Text>
                     </View>
                   ))}
@@ -177,6 +296,181 @@ export default function LeagueTab() {
           </>
         )}
       </ScrollView>
+
+      {/* Match Details and Score Reporting Modal */}
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={modalVisible}
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Match Details</Text>
+              <TouchableOpacity
+                onPress={() => setModalVisible(false)}
+                style={styles.closeButton}
+              >
+                <X color="#6B7280" size={24} />
+              </TouchableOpacity>
+            </View>
+
+            {selectedMatch && (
+              <ScrollView style={styles.modalScrollView} showsVerticalScrollIndicator={false}>
+                <View style={styles.modalMatchInfo}>
+                  <Text style={styles.modalWeek}>Week {selectedMatch.weekNumber}</Text>
+                  <Text style={styles.modalSeasonName}>{season?.name}</Text>
+                </View>
+
+                {loadingMatchDetails ? (
+                  <View style={styles.loadingContainer}>
+                    <ActivityIndicator size="small" color="#7C3AED" />
+                    <Text style={styles.loadingText}>Loading match details...</Text>
+                  </View>
+                ) : player1Data && player2Data ? (
+                  <>
+                    {/* Match Handicap Info */}
+                    <View style={styles.handicapSection}>
+                      <Text style={styles.sectionTitle}>Match Format (APA Handicap)</Text>
+                      <View style={styles.handicapGrid}>
+                        <View style={styles.handicapCard}>
+                          <Text style={[
+                            styles.handicapPlayerName,
+                            selectedMatch.player1Id === currentUserId && styles.modalCurrentUser
+                          ]}>
+                            {selectedMatch.player1Name}
+                            {selectedMatch.player1Id === currentUserId && ' (You)'}
+                          </Text>
+                          <Text style={styles.handicapSkillLevel}>
+                            Skill Level: {player1Data.skillLevelNum}
+                          </Text>
+                          <Text style={styles.handicapRacks}>
+                            Needs {getRacksNeeded(player1Data.skillLevelNum, player2Data.skillLevelNum).player1} racks to win
+                          </Text>
+                        </View>
+                        <View style={styles.handicapCard}>
+                          <Text style={[
+                            styles.handicapPlayerName,
+                            selectedMatch.player2Id === currentUserId && styles.modalCurrentUser
+                          ]}>
+                            {selectedMatch.player2Name}
+                            {selectedMatch.player2Id === currentUserId && ' (You)'}
+                          </Text>
+                          <Text style={styles.handicapSkillLevel}>
+                            Skill Level: {player2Data.skillLevelNum}
+                          </Text>
+                          <Text style={styles.handicapRacks}>
+                            Needs {getRacksNeeded(player1Data.skillLevelNum, player2Data.skillLevelNum).player2} racks to win
+                          </Text>
+                        </View>
+                      </View>
+                    </View>
+
+                    {/* Opponent Contact Info */}
+                    {(() => {
+                      const isPlayer1 = selectedMatch.player1Id === currentUserId;
+                      const opponent = isPlayer1 ? player2Data : player1Data;
+                      
+                      return (
+                        <View style={styles.contactSection}>
+                          <Text style={styles.sectionTitle}>Opponent Contact</Text>
+                          <View style={styles.contactCard}>
+                            <Text style={styles.contactName}>{opponent.name}</Text>
+                            {opponent.email && (
+                              <View style={styles.contactItem}>
+                                <Text style={styles.contactLabel}>Email:</Text>
+                                <Text style={styles.contactValue}>{opponent.email}</Text>
+                              </View>
+                            )}
+                            {opponent.phone && (
+                              <View style={styles.contactItem}>
+                                <Text style={styles.contactLabel}>Phone:</Text>
+                                <Text style={styles.contactValue}>{opponent.phone}</Text>
+                              </View>
+                            )}
+                            {opponent.wechat && (
+                              <View style={styles.contactItem}>
+                                <Text style={styles.contactLabel}>WeChat:</Text>
+                                <Text style={styles.contactValue}>{opponent.wechat}</Text>
+                              </View>
+                            )}
+                            {!opponent.phone && !opponent.wechat && !opponent.email && (
+                              <Text style={styles.noContactInfo}>No contact information available</Text>
+                            )}
+                          </View>
+                        </View>
+                      );
+                    })()}
+
+                    {/* Score Reporting Section */}
+                    <View style={styles.scoreSection}>
+                      <Text style={styles.sectionTitle}>Report Score</Text>
+                      <View style={styles.scoreInputContainer}>
+                        <View style={styles.playerScoreSection}>
+                          <Text style={[
+                            styles.modalPlayerName,
+                            selectedMatch.player1Id === currentUserId && styles.modalCurrentUser
+                          ]}>
+                            {selectedMatch.player1Name}
+                            {selectedMatch.player1Id === currentUserId && ' (You)'}
+                          </Text>
+                          <TextInput
+                            style={styles.scoreInput}
+                            placeholder="Racks won"
+                            keyboardType="number-pad"
+                            value={player1Score}
+                            onChangeText={setPlayer1Score}
+                          />
+                        </View>
+
+                        <Text style={styles.modalVsText}>VS</Text>
+
+                        <View style={styles.playerScoreSection}>
+                          <Text style={[
+                            styles.modalPlayerName,
+                            selectedMatch.player2Id === currentUserId && styles.modalCurrentUser
+                          ]}>
+                            {selectedMatch.player2Name}
+                            {selectedMatch.player2Id === currentUserId && ' (You)'}
+                          </Text>
+                          <TextInput
+                            style={styles.scoreInput}
+                            placeholder="Racks won"
+                            keyboardType="number-pad"
+                            value={player2Score}
+                            onChangeText={setPlayer2Score}
+                          />
+                        </View>
+                      </View>
+                    </View>
+
+                    <View style={styles.modalButtons}>
+                      <TouchableOpacity
+                        style={[styles.modalButton, styles.cancelButton]}
+                        onPress={() => setModalVisible(false)}
+                      >
+                        <Text style={styles.cancelButtonText}>Close</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.modalButton, styles.submitButton]}
+                        onPress={handleSubmitScore}
+                        disabled={submitting}
+                      >
+                        <Text style={styles.submitButtonText}>
+                          {submitting ? 'Submitting...' : 'Submit Score'}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  </>
+                ) : (
+                  <Text style={styles.errorText}>Unable to load match details</Text>
+                )}
+              </ScrollView>
+            )}
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -373,5 +667,240 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     textAlign: 'center',
     paddingVertical: 16,
+  },
+  matchesList: {
+    gap: 12,
+  },
+  matchCardSimple: {
+    backgroundColor: 'white',
+    borderRadius: 8,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  matchSimpleContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  matchWeekSimple: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#7C3AED',
+    textTransform: 'uppercase',
+    marginBottom: 4,
+  },
+  opponentName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1F2937',
+  },
+  tapToView: {
+    fontSize: 14,
+    color: '#9CA3AF',
+    fontWeight: '500',
+  },
+  currentUserName: {
+    color: '#7C3AED',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    backgroundColor: 'white',
+    borderRadius: 16,
+    padding: 24,
+    width: '90%',
+    maxWidth: 500,
+    maxHeight: '85%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  modalScrollView: {
+    maxHeight: '100%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#1F2937',
+  },
+  closeButton: {
+    padding: 4,
+  },
+  modalMatchInfo: {
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  modalWeek: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#7C3AED',
+    textTransform: 'uppercase',
+  },
+  modalSeasonName: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginTop: 4,
+  },
+  sectionTitle: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#1F2937',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 12,
+  },
+  handicapSection: {
+    marginBottom: 20,
+  },
+  handicapGrid: {
+    gap: 12,
+  },
+  handicapCard: {
+    backgroundColor: '#F9FAFB',
+    borderRadius: 8,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  handicapPlayerName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 6,
+  },
+  handicapSkillLevel: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginBottom: 4,
+  },
+  handicapRacks: {
+    fontSize: 13,
+    color: '#7C3AED',
+    fontWeight: '600',
+  },
+  contactSection: {
+    marginBottom: 20,
+  },
+  contactCard: {
+    backgroundColor: '#F9FAFB',
+    borderRadius: 8,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  contactName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 12,
+  },
+  contactItem: {
+    flexDirection: 'row',
+    marginBottom: 8,
+  },
+  contactLabel: {
+    fontSize: 14,
+    color: '#6B7280',
+    fontWeight: '500',
+    width: 70,
+  },
+  contactValue: {
+    fontSize: 14,
+    color: '#1F2937',
+    flex: 1,
+  },
+  noContactInfo: {
+    fontSize: 14,
+    color: '#9CA3AF',
+    fontStyle: 'italic',
+  },
+  scoreSection: {
+    marginBottom: 20,
+  },
+  loadingText: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginTop: 8,
+  },
+  errorText: {
+    fontSize: 14,
+    color: '#EF4444',
+    textAlign: 'center',
+    padding: 16,
+  },
+  scoreInputContainer: {
+    gap: 12,
+  },
+  playerScoreSection: {
+    gap: 8,
+  },
+  modalPlayerName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1F2937',
+    textAlign: 'center',
+  },
+  modalCurrentUser: {
+    color: '#7C3AED',
+  },
+  scoreInput: {
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    textAlign: 'center',
+    backgroundColor: 'white',
+  },
+  modalVsText: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#9CA3AF',
+    textAlign: 'center',
+    marginVertical: 4,
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  modalButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  cancelButton: {
+    backgroundColor: '#F3F4F6',
+  },
+  cancelButtonText: {
+    color: '#6B7280',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  submitButton: {
+    backgroundColor: '#7C3AED',
+  },
+  submitButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });

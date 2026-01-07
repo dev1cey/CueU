@@ -35,22 +35,24 @@ export const createUser = async (
     const userRef = doc(db, USERS_COLLECTION, userId);
     const now = Timestamp.now();
     
-    // Map skill level to number
+    // Map skill level to APA number (2-7 range)
     const skillLevelMap: Record<SkillLevel, number> = {
-      'beginner': 1,
-      'intermediate': 2,
-      'advanced': 3,
-      'expert': 4,
+      'beginner': 2,
+      'intermediate': 3,
+      'advanced': 5,
+      'expert': 7,
     };
     
     const newUser: Omit<User, 'id'> = {
       ...userData,
+      phone: userData.phone ? Number(userData.phone) : undefined,
       bio: userData.bio || '',
       skillLevelNum: skillLevelMap[userData.skillLevel],
       wins: 0,
       losses: 0,
       matchesPlayed: 0,
       matchHistory: [],
+      seasonPoints: {}, // Initialize season points
       createdAt: now,
     };
 
@@ -175,7 +177,12 @@ export const getTopPlayers = async (limitCount: number = 10): Promise<User[]> =>
 };
 
 // Get top players by player IDs (for season-specific rankings)
-export const getTopPlayersByIds = async (playerIds: string[], limitCount?: number): Promise<User[]> => {
+// Now sorts by season points instead of win rate
+export const getTopPlayersByIds = async (
+  playerIds: string[], 
+  limitCount?: number,
+  seasonId?: string
+): Promise<User[]> => {
   try {
     if (playerIds.length === 0) return [];
     
@@ -187,18 +194,15 @@ export const getTopPlayersByIds = async (playerIds: string[], limitCount?: numbe
     const validPlayers = players
       .filter((player): player is User => player !== null)
       .map(user => {
-        // Calculate win rate for sorting (0% for users with no matches)
-        const calculatedWinRate = user.matchesPlayed > 0 
-          ? (user.wins / user.matchesPlayed) * 100 
+        // Get season points for the specified season (or 0 if not available)
+        const seasonPoints = seasonId 
+          ? (user.seasonPoints?.[seasonId] || 0)
           : 0;
-        return { user, winRate: calculatedWinRate };
+        return { user, seasonPoints };
       })
       .sort((a, b) => {
-        // Players with matches come before players without matches
-        if (a.user.matchesPlayed === 0 && b.user.matchesPlayed > 0) return 1;
-        if (a.user.matchesPlayed > 0 && b.user.matchesPlayed === 0) return -1;
-        // Otherwise sort by win rate
-        return b.winRate - a.winRate;
+        // Sort by season points (descending)
+        return b.seasonPoints - a.seasonPoints;
       });
     
     // Apply limit if specified
@@ -233,6 +237,32 @@ export const updateUserStats = async (
     });
   } catch (error) {
     console.error('Error updating user stats:', error);
+    throw error;
+  }
+};
+
+// Update user season points
+export const updateUserSeasonPoints = async (
+  userId: string,
+  seasonId: string,
+  pointsToAdd: number
+): Promise<void> => {
+  try {
+    const user = await getUserById(userId);
+    if (!user) throw new Error('User not found');
+
+    const currentSeasonPoints = user.seasonPoints || {};
+    const currentPoints = currentSeasonPoints[seasonId] || 0;
+    const newPoints = currentPoints + pointsToAdd;
+
+    await updateUserProfile(userId, {
+      seasonPoints: {
+        ...currentSeasonPoints,
+        [seasonId]: newPoints,
+      },
+    });
+  } catch (error) {
+    console.error('Error updating user season points:', error);
     throw error;
   }
 };

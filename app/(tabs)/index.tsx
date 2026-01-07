@@ -16,18 +16,25 @@ interface QuickStat {
 export default function HomeTab() {
   // Fetch data from Firebase
   const { season, loading: seasonLoading } = useActiveSeason();
-  const { players: topPlayers, loading: playersLoading } = useSeasonTopPlayers(season?.playerIds || null, 3);
+  const { players: topPlayers, loading: playersLoading } = useSeasonTopPlayers(
+    season?.playerIds || null, 
+    3,
+    season?.id
+  );
   const { events, loading: eventsLoading } = useUpcomingEvents();
   const { currentUser } = useAuth();
 
   // Fetch all season players to calculate rank
-  const { players: allPlayers, loading: allPlayersLoading } = useSeasonTopPlayers(season?.playerIds || null);
+  const { players: allPlayers, loading: allPlayersLoading } = useSeasonTopPlayers(
+    season?.playerIds || null,
+    undefined,
+    season?.id
+  );
 
-  // Calculate win rate (always compute from wins/matches)
-  const calculateWinRate = (user: typeof currentUser) => {
-    if (!user) return 0;
-    if (user.matchesPlayed === 0) return 0;
-    return (user.wins / user.matchesPlayed) * 100;
+  // Get current user's season points
+  const getSeasonPoints = (user: typeof currentUser) => {
+    if (!user || !season?.id) return 0;
+    return user.seasonPoints?.[season.id] || 0;
   };
 
   // Calculate current user's rank
@@ -40,12 +47,12 @@ export default function HomeTab() {
   // User stats based on logged in user
   const quickStats: QuickStat[] = currentUser ? [
     { label: 'Skill Level', value: currentUser.skillLevel, subtext: currentUser.skillLevel.charAt(0).toUpperCase() + currentUser.skillLevel.slice(1) },
-    { label: 'Win Rate', value: `${calculateWinRate(currentUser).toFixed(0)}%`, subtext: `${currentUser.wins}-${currentUser.losses} record` },
+    { label: 'Season Points', value: getSeasonPoints(currentUser).toFixed(1), subtext: `${currentUser.wins}-${currentUser.losses} record` },
     { label: 'Rank', value: calculateUserRank(), subtext: `of ${season?.playerIds.length || 0} players` },
     { label: 'Matches', value: `${currentUser.matchesPlayed}`, subtext: 'total played' }
   ] : [
     { label: 'Skill Level', value: '-', subtext: 'Not logged in' },
-    { label: 'Win Rate', value: '-', subtext: '-' },
+    { label: 'Season Points', value: '-', subtext: '-' },
     { label: 'Rank', value: '-', subtext: '-' },
     { label: 'Matches', value: '-', subtext: '-' }
   ];
@@ -137,23 +144,27 @@ export default function HomeTab() {
             </View>
           ) : topPlayers.length > 0 ? (
             <View style={styles.rankingsList}>
-              {topPlayers.map((player, index) => (
-                <View key={player.id} style={styles.rankingItem}>
-                  <Text style={styles.rankingEmoji}>
-                    {index === 0 && '🥇'}
-                    {index === 1 && '🥈'}
-                    {index === 2 && '🥉'}
-                  </Text>
-                  <View style={styles.rankingInfo}>
-                    <Text style={styles.rankingName}>{player.name}</Text>
-                    <View style={styles.recordContainer}>
-                      <Text style={styles.wins}>{player.wins}</Text>
-                      <Text style={styles.recordSeparator}> - </Text>
-                      <Text style={styles.losses}>{player.losses}</Text>
+              {topPlayers.map((player, index) => {
+                const seasonPoints = season?.id 
+                  ? (player.seasonPoints?.[season.id] || 0)
+                  : 0;
+                return (
+                  <View key={player.id} style={styles.rankingItem}>
+                    <Text style={styles.rankingEmoji}>
+                      {index === 0 && '🥇'}
+                      {index === 1 && '🥈'}
+                      {index === 2 && '🥉'}
+                    </Text>
+                    <View style={styles.rankingInfo}>
+                      <Text style={styles.rankingName}>{player.name}</Text>
+                      <View style={styles.recordContainer}>
+                        <Text style={styles.wins}>{seasonPoints.toFixed(1)}</Text>
+                        <Text style={styles.recordSeparator}> pts</Text>
+                      </View>
                     </View>
                   </View>
-                </View>
-              ))}
+                );
+              })}
             </View>
           ) : (
             <View style={styles.emptyState}>
