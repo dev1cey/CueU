@@ -2,7 +2,6 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Calendar, MapPin, Trophy, Bell, ChevronRight } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from 'expo-router';
 import { useSeasonTopPlayers } from '../../hooks/useUsers';
 import { useUpcomingEvents } from '../../hooks/useEvents';
 import { useActiveSeason } from '../../hooks/useSeasons';
@@ -19,25 +18,13 @@ interface QuickStat {
 
 export default function HomeTab() {
   // Fetch data from Firebase
-  const router = useRouter();
-  const [refreshing, setRefreshing] = useState(false);
-  const { season, loading: seasonLoading, refetch: refetchSeason } = useActiveSeason();
-  const { players: topPlayers, loading: playersLoading, refetch: refetchTopPlayers } = useSeasonTopPlayers(
-    season?.playerIds || null, 
-    3,
-    season?.id
-  );
-  const { events, loading: eventsLoading, refetch: refetchEvents } = useUpcomingEvents();
-  const { currentUser, currentUserId } = useAuth();
-  const { matches: upcomingMatches, loading: matchesLoading, refetch: refetchMatches } = useUpcomingMatches(currentUserId || undefined);
-  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
+  const { season, loading: seasonLoading } = useActiveSeason();
+  const { players: topPlayers, loading: playersLoading } = useSeasonTopPlayers(season?.playerIds || null, 3);
+  const { events, loading: eventsLoading } = useUpcomingEvents();
+  const { currentUser } = useAuth();
 
   // Fetch all season players to calculate rank
-  const { players: allPlayers, loading: allPlayersLoading, refetch: refetchAllPlayers } = useSeasonTopPlayers(
-    season?.playerIds || null,
-    undefined,
-    season?.id
-  );
+  const { players: allPlayers, loading: allPlayersLoading } = useSeasonTopPlayers(season?.playerIds || null);
 
   // Get current user's season points
   const getSeasonPoints = (user: typeof currentUser) => {
@@ -55,7 +42,7 @@ export default function HomeTab() {
   // User stats based on logged in user
   const quickStats: QuickStat[] = currentUser ? [
     { label: 'Skill Level', value: currentUser.skillLevel, subtext: currentUser.skillLevel.charAt(0).toUpperCase() + currentUser.skillLevel.slice(1) },
-    { label: 'Season Points', value: getSeasonPoints(currentUser).toFixed(1), subtext: `${currentUser.wins}-${currentUser.losses} record` },
+    { label: 'Win Rate', value: `${calculateWinRate(currentUser).toFixed(0)}%`, subtext: `${currentUser.wins}-${currentUser.losses} record` },
     { label: 'Rank', value: calculateUserRank(), subtext: `of ${season?.playerIds.length || 0} players` },
     { label: 'Matches', value: `${currentUser.matchesPlayed}`, subtext: 'total played' }
   ] : [
@@ -254,27 +241,23 @@ export default function HomeTab() {
             </View>
           ) : topPlayers.length > 0 ? (
             <View style={styles.rankingsList}>
-              {topPlayers.map((player, index) => {
-                const seasonPoints = season?.id 
-                  ? (player.seasonPoints?.[season.id] || 0)
-                  : 0;
-                return (
-                  <View key={player.id} style={styles.rankingItem}>
-                    <Text style={styles.rankingEmoji}>
-                      {index === 0 && '🥇'}
-                      {index === 1 && '🥈'}
-                      {index === 2 && '🥉'}
-                    </Text>
-                    <View style={styles.rankingInfo}>
-                      <Text style={styles.rankingName}>{player.name}</Text>
-                      <View style={styles.recordContainer}>
-                        <Text style={styles.wins}>{seasonPoints.toFixed(1)}</Text>
-                        <Text style={styles.recordSeparator}> pts</Text>
-                      </View>
+              {topPlayers.map((player, index) => (
+                <View key={player.id} style={styles.rankingItem}>
+                  <Text style={styles.rankingEmoji}>
+                    {index === 0 && '🥇'}
+                    {index === 1 && '🥈'}
+                    {index === 2 && '🥉'}
+                  </Text>
+                  <View style={styles.rankingInfo}>
+                    <Text style={styles.rankingName}>{player.name}</Text>
+                    <View style={styles.recordContainer}>
+                      <Text style={styles.wins}>{player.wins}</Text>
+                      <Text style={styles.recordSeparator}> - </Text>
+                      <Text style={styles.losses}>{player.losses}</Text>
                     </View>
                   </View>
-                );
-              })}
+                </View>
+              ))}
             </View>
           ) : (
             <View style={styles.emptyState}>

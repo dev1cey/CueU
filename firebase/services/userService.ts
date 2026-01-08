@@ -179,12 +179,7 @@ export const getTopPlayers = async (limitCount: number = 10): Promise<User[]> =>
 };
 
 // Get top players by player IDs (for season-specific rankings)
-// Now sorts by season points instead of win rate
-export const getTopPlayersByIds = async (
-  playerIds: string[], 
-  limitCount?: number,
-  seasonId?: string
-): Promise<User[]> => {
+export const getTopPlayersByIds = async (playerIds: string[], limitCount?: number): Promise<User[]> => {
   try {
     if (playerIds.length === 0) return [];
     
@@ -196,15 +191,18 @@ export const getTopPlayersByIds = async (
     const validPlayers = players
       .filter((player): player is User => player !== null)
       .map(user => {
-        // Get season points for the specified season (or 0 if not available)
-        const seasonPoints = seasonId 
-          ? (user.seasonPoints?.[seasonId] || 0)
+        // Calculate win rate for sorting (0% for users with no matches)
+        const calculatedWinRate = user.matchesPlayed > 0 
+          ? (user.wins / user.matchesPlayed) * 100 
           : 0;
-        return { user, seasonPoints };
+        return { user, winRate: calculatedWinRate };
       })
       .sort((a, b) => {
-        // Sort by season points (descending)
-        return b.seasonPoints - a.seasonPoints;
+        // Players with matches come before players without matches
+        if (a.user.matchesPlayed === 0 && b.user.matchesPlayed > 0) return 1;
+        if (a.user.matchesPlayed > 0 && b.user.matchesPlayed === 0) return -1;
+        // Otherwise sort by win rate
+        return b.winRate - a.winRate;
       });
     
     // Apply limit if specified

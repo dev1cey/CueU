@@ -112,11 +112,7 @@ export const useAllUsers = () => {
 };
 
 // Hook to get top players by player IDs (for season-specific rankings)
-export const useSeasonTopPlayers = (
-  playerIds: string[] | null, 
-  limit?: number,
-  seasonId?: string
-) => {
+export const useSeasonTopPlayers = (playerIds: string[] | null, limit?: number) => {
   const [players, setPlayers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
@@ -131,7 +127,7 @@ export const useSeasonTopPlayers = (
     const fetchPlayers = async () => {
       try {
         setLoading(true);
-        const playersData = await getTopPlayersByIds(playerIds, limit, seasonId);
+        const playersData = await getTopPlayersByIds(playerIds, limit);
         setPlayers(playersData);
         setError(null);
       } catch (err) {
@@ -142,14 +138,14 @@ export const useSeasonTopPlayers = (
     };
 
     fetchPlayers();
-  }, [playerIds, limit, seasonId]);
+  }, [playerIds, limit]);
 
   const refetch = async () => {
     if (!playerIds || playerIds.length === 0) return;
     
     try {
       setLoading(true);
-      const playersData = await getTopPlayersByIds(playerIds, limit, seasonId);
+      const playersData = await getTopPlayersByIds(playerIds, limit);
       setPlayers(playersData);
       setError(null);
     } catch (err) {

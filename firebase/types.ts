@@ -45,14 +45,6 @@ export interface Match {
     player1: number;
     player2: number;
   };
-  // APA Handicap system fields
-  player1SkillLevel?: number; // Skill level at match time (2-7)
-  player2SkillLevel?: number; // Skill level at match time (2-7)
-  player1RacksNeeded?: number; // Racks needed to win based on handicap
-  player2RacksNeeded?: number; // Racks needed to win based on handicap
-  // Points earned from this match
-  player1Points?: number; // Points earned by player1 (0-10)
-  player2Points?: number; // Points earned by player2 (0-10)
   status: MatchStatus;
   createdAt: Timestamp;
 }
@@ -98,39 +90,5 @@ export interface Season {
   totalMatches: number;
   playerIds: string[]; // Array of user IDs participating in the season
   pendingPlayerIds: string[]; // Array of user IDs pending admin approval
-  createdAt: Timestamp;
-}
-
-// Match Report types
-export type ReportStatus = 'pending' | 'resolved';
-
-export interface MatchReport {
-  id: string;
-  matchId: string;
-  reportedBy: string; // User ID of the person reporting
-  reportedByName: string; // Name of the person reporting
-  message: string; // User's description of the issue
-  status: ReportStatus;
-  resolvedBy?: string; // Admin user ID who resolved it
-  resolvedAt?: Timestamp;
-  createdAt: Timestamp;
-}
-
-// Notification types
-export type NotificationType = 'match_scheduled' | 'news_released' | 'ranking_changed';
-
-export interface Notification {
-  id: string;
-  userId: string; // User who should receive this notification
-  type: NotificationType;
-  title: string;
-  message: string;
-  read: boolean;
-  // Optional data for navigation or additional context
-  matchId?: string; // For match_scheduled notifications
-  newsId?: string; // For news_released notifications
-  seasonId?: string; // For ranking_changed notifications
-  oldRank?: number; // For ranking_changed notifications
-  newRank?: number; // For ranking_changed notifications
   createdAt: Timestamp;
 }

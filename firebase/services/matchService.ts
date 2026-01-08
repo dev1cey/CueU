@@ -12,10 +12,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../config';
 import { Match, MatchStatus } from '../types';
-import { updateUserStats, updateUserSeasonPoints, getUserById } from './userService';
-import { getRacksNeeded, calculateMatchPoints } from '../utils/handicapUtils';
-import { notifyMatchScheduled } from './notificationService';
-import { getSeasonById } from './seasonService';
+import { updateUserStats } from './userService';
 
 const MATCHES_COLLECTION = 'matches';
 
@@ -36,6 +33,9 @@ export const createMatch = async (matchData: {
     // Extended match data with extra fields not in the base Match type
     const newMatch: any = {
       ...matchData,
+      scheduledDate: matchData.scheduledDate
+        ? Timestamp.fromDate(matchData.scheduledDate)
+        : undefined,
       status: 'planned' as MatchStatus,
       createdAt: now,
       updatedAt: now,
