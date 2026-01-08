@@ -146,6 +146,7 @@
 				00DD1BFF1BD5951E006B06BC /* Bundle React Native code and images */,
 				800E24972A6A228C8D4807E9 /* [CP] Copy Pods Resources */,
 				2F6EEE66B8AE566BC8D99231 /* [CP] Embed Pods Frameworks */,
+				A1B2C3D4E5F6A7B8C9D0E1F2 /* Copy React Native Framework dSYMs */,
 			);
 			buildRules = (
 			);
@@ -321,6 +322,27 @@
 			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-CueU/Pods-CueU-resources.sh\"\n";
 			showEnvVarsInLog = 0;
 		};
+		A1B2C3D4E5F6A7B8C9D0E1F2 /* Copy React Native Framework dSYMs */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+				"${PODS_XCFRAMEWORKS_BUILD_DIR}/React-Core-prebuilt/React.framework",
+				"${PODS_XCFRAMEWORKS_BUILD_DIR}/ReactNativeDependencies/ReactNativeDependencies.framework",
+				"${PODS_XCFRAMEWORKS_BUILD_DIR}/hermes-engine/Pre-built/hermes.framework",
+				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/React.framework",
+				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/ReactNativeDependencies.framework",
+				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/hermes.framework",
+			);
+			name = "Copy React Native Framework dSYMs";
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 1;
+			shellPath = /bin/sh;
+			shellScript = "# Generate and copy dSYMs from prebuilt React Native frameworks\n# This ensures dSYMs are included when distributing to App Store\n\nset -e\n\n# Only run for Release builds and when DWARF_DSYM_FOLDER_PATH is set (archiving)\nif [[ \"${CONFIGURATION}\" != *Release* ]] || [[ -z \"${DWARF_DSYM_FOLDER_PATH}\" ]]; then\n  exit 0\nfi\n\n# Function to generate dSYM from framework binary using dsymutil\ngenerate_dsym() {\n  local framework_path=\"$1\"\n  local framework_name=\"$(basename \"${framework_path}\" .framework)\"\n  local binary_path=\"${framework_path}/${framework_name}\"\n  \n  # Check if framework binary exists\n  if [[ ! -f \"${binary_path}\" ]]; then\n    echo \"[dSYM] Warning: Binary not found at ${binary_path}\"\n    return\n  fi\n  \n  # First, try to find existing dSYM\n  if [[ -d \"${framework_path}.dSYM\" ]]; then\n    echo \"[dSYM] Found existing dSYM for ${framework_name}, copying to archive\"\n    cp -R \"${framework_path}.dSYM\" \"${DWARF_DSYM_FOLDER_PATH}/\" || true\n    return\n  fi\n  \n  # Check parent directory for dSYM\n  local parent_dir=\"$(dirname \"${framework_path}\")\"\n  if [[ -d \"${parent_dir}/${framework_name}.framework.dSYM\" ]]; then\n    echo \"[dSYM] Found dSYM in parent directory, copying to archive\"\n    cp -R \"${parent_dir}/${framework_name}.framework.dSYM\" \"${DWARF_DSYM_FOLDER_PATH}/\" || true\n    return\n  fi\n  \n  # Generate dSYM from framework binary using dsymutil\n  echo \"[dSYM] Generating dSYM for ${framework_name} from binary\"\n  local dsym_output=\"${DWARF_DSYM_FOLDER_PATH}/${framework_name}.framework.dSYM\"\n  \n  # Use dsymutil to extract debug symbols from the binary\n  if command -v dsymutil &> /dev/null; then\n    dsymutil -o \"${dsym_output}\" \"${binary_path}\" 2>&1 || {\n      echo \"[dSYM] Warning: dsymutil failed for ${framework_name}, trying alternative method\"\n      # Alternative: create dSYM structure manually if dsymutil fails\n      mkdir -p \"${dsym_output}/Contents/Resources/DWARF\"\n      # Copy the binary to DWARF folder (Xcode will use it)\n      cp \"${binary_path}\" \"${dsym_output}/Contents/Resources/DWARF/${framework_name}\" || true\n    }\n    echo \"[dSYM] Successfully generated dSYM for ${framework_name}\"\n  else\n    echo \"[dSYM] Error: dsymutil not found. Cannot generate dSYM for ${framework_name}\"\n  fi\n}\n\n# Process React Native frameworks - check both source and embedded locations\n# Try embedded frameworks first (these are what actually get shipped)\nif [[ -d \"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/React.framework\" ]]; then\n  generate_dsym \"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/React.framework\"\nelif [[ -d \"${PODS_XCFRAMEWORKS_BUILD_DIR}/React-Core-prebuilt/React.framework\" ]]; then\n  generate_dsym \"${PODS_XCFRAMEWORKS_BUILD_DIR}/React-Core-prebuilt/React.framework\"\nfi\n\nif [[ -d \"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/ReactNativeDependencies.framework\" ]]; then\n  generate_dsym \"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/ReactNativeDependencies.framework\"\nelif [[ -d \"${PODS_XCFRAMEWORKS_BUILD_DIR}/ReactNativeDependencies/ReactNativeDependencies.framework\" ]]; then\n  generate_dsym \"${PODS_XCFRAMEWORKS_BUILD_DIR}/ReactNativeDependencies/ReactNativeDependencies.framework\"\nfi\n\nif [[ -d \"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/hermes.framework\" ]]; then\n  generate_dsym \"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/hermes.framework\"\nelif [[ -d \"${PODS_XCFRAMEWORKS_BUILD_DIR}/hermes-engine/Pre-built/hermes.framework\" ]]; then\n  generate_dsym \"${PODS_XCFRAMEWORKS_BUILD_DIR}/hermes-engine/Pre-built/hermes.framework\"\nfi\n\necho \"[dSYM] dSYM generation script completed\"\n";
+			showEnvVarsInLog = 0;
+		};
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -381,6 +403,7 @@
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = CueU/CueU.entitlements;
 				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = VUBCR3HVYF;
 				INFOPLIST_FILE = CueU/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
@@ -497,6 +520,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Developer";
 				COPY_PHASE_STRIP = YES;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu99;
