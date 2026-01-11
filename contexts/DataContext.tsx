@@ -10,6 +10,8 @@ import {
   getMatchesForUser
 } from '../firebase/services';
 import { getUnreadNotificationCount } from '../firebase/services/notificationService';
+import { auth } from '../firebase/config';
+import { onAuthStateChanged } from 'firebase/auth';
 
 interface DataContextType {
   // Season data
@@ -247,6 +249,11 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
 
   // Refresh all data
   const refreshAll = useCallback(async (userId?: string, silent: boolean = false) => {
+    // Don't fetch if not authenticated (rules require auth)
+    if (!auth.currentUser) {
+      return;
+    }
+    
     const now = Date.now();
     // Throttle refreshes to prevent excessive calls
     if (isRefreshingRef.current || (now - lastRefreshTimeRef.current < MIN_REFRESH_INTERVAL && silent)) {
@@ -297,15 +304,32 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     }
 
     // Initial fetch - only show loading on first mount, not on subsequent auto-refresh setups
+    // Wait for Firebase Auth to be ready before fetching (auth state must be determined)
     if (!initialFetchDoneRef.current) {
       const initialFetch = async () => {
+        // Wait for Firebase Auth to initialize - check if auth state has been determined
+        // We'll wait up to 3 seconds for auth to be ready
+        let attempts = 0;
+        const maxAttempts = 30; // 3 seconds total
+        while (attempts < maxAttempts) {
+          // Check if we have a current user OR if auth has been initialized
+          // If auth.currentUser is null but auth is initialized, that's fine - we'll still try to fetch
+          // The key is waiting a bit for onAuthStateChanged to fire at least once
+          await new Promise(resolve => setTimeout(resolve, 100));
+          attempts++;
+          // If we have a user, we can proceed immediately
+          if (auth.currentUser) break;
+        }
         // Only show loading if we don't have data yet (first mount)
         const isFirstMount = !season && events.length === 0 && news.length === 0;
-        await Promise.all([
-          refetchSeasonRef.current(!isFirstMount), // Silent if we already have data
-          refetchEventsRef.current(!isFirstMount),
-          refetchNewsRef.current(!isFirstMount),
-        ]);
+        // Only fetch if authenticated (rules require auth)
+        if (auth.currentUser) {
+          await Promise.all([
+            refetchSeasonRef.current(!isFirstMount), // Silent if we already have data
+            refetchEventsRef.current(!isFirstMount),
+            refetchNewsRef.current(!isFirstMount),
+          ]);
+        }
         initialFetchDoneRef.current = true;
       };
       initialFetch();
@@ -313,8 +337,8 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
 
     // Set up interval
     refreshIntervalRef.current = setInterval(() => {
-      // Only refresh if app is in foreground
-      if (appStateRef.current === 'active' && !isRefreshingRef.current) {
+      // Only refresh if app is in foreground and user is authenticated
+      if (appStateRef.current === 'active' && !isRefreshingRef.current && auth.currentUser) {
         refreshAllRef.current(matchesUserIdRef.current, true); // Silent refresh for auto-refresh
       }
     }, AUTO_REFRESH_INTERVAL);
@@ -334,7 +358,8 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         appStateRef.current.match(/inactive|background/) &&
         nextAppState === 'active' &&
         autoRefreshEnabled &&
-        !isRefreshingRef.current
+        !isRefreshingRef.current &&
+        auth.currentUser // Only refresh if authenticated
       ) {
         // App has come to the foreground, refresh data silently
         refreshAllRef.current(matchesUserIdRef.current, true); // Silent refresh when app comes to foreground
@@ -346,6 +371,17 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       subscription.remove();
     };
   }, [autoRefreshEnabled]); // Only depend on autoRefreshEnabled
+
+  // Listen to auth state changes and refetch when user authenticates
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user && initialFetchDoneRef.current) {
+        // User just authenticated, refetch data
+        refreshAllRef.current(matchesUserIdRef.current, true);
+      }
+    });
+    return unsubscribe;
+  }, []);
 
   // Update players when season changes - use silent refresh
   const prevSeasonRef = useRef<{ id: string | undefined; playerIdsLength: number }>({ id: undefined, playerIdsLength: 0 });

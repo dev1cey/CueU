@@ -4,7 +4,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../contexts/AuthContext';
-import { signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
+import { signInWithPopup, GoogleAuthProvider, signInWithEmailAndPassword } from 'firebase/auth';
 import { auth, GOOGLE_OAUTH_IOS_CLIENT_ID } from '../firebase/config';
 import * as WebBrowser from 'expo-web-browser';
 import * as Google from 'expo-auth-session/providers/google';
@@ -118,16 +118,42 @@ export default function AuthScreen() {
   const handleSkipAuth = async () => {
     // Use test-user-1 from seeded data
     const TEST_PLAYER_ID = 'UUtPL20HxNTYVlSJhs1e'; // test-user-1
+    // Test Firebase Auth account (must be created in Firebase Console)
+    // For development: create a test@uw.edu account with password "test123456"
+    const TEST_EMAIL = 'test@uw.edu';
+    const TEST_PASSWORD = 'test123456';
     
     try {
       setIsLoading(true);
+      
+      // Use test email (user must create this Firebase Auth user in console)
+      // The test user in Firestore should have this email
+      const userEmail = TEST_EMAIL;
+      
+      // Sign in with test email/password to satisfy Firestore rules
+      try {
+        await signInWithEmailAndPassword(auth, userEmail, TEST_PASSWORD);
+      } catch (authError: any) {
+        // If test account doesn't exist, show helpful error
+        if (authError?.code === 'auth/user-not-found' || authError?.code === 'auth/wrong-password' || authError?.code === 'auth/invalid-email') {
+          Alert.alert(
+            'Test Account Setup Required',
+            `To use Skip Login, please create a Firebase Auth user:\n\nEmail: ${userEmail}\nPassword: ${TEST_PASSWORD}\n\nGo to Firebase Console → Authentication → Add User\n\nAlternatively, enable Anonymous Authentication in Firebase Console.`,
+            [{ text: 'OK' }]
+          );
+          return;
+        }
+        throw authError;
+      }
+      
+      // Then login as the test user in our app
       await login(TEST_PLAYER_ID);
       router.push('/(tabs)');
     } catch (error) {
       console.error('Error logging in as test player:', error);
       Alert.alert(
         'Login Error',
-        'Failed to log in as test-user-1. Please check if the user exists in the database.',
+        error instanceof Error ? error.message : 'Failed to log in as test-user-1. Please check if the user exists in the database.',
         [{ text: 'OK' }]
       );
     } finally {

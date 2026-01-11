@@ -1,14 +1,16 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { Bell, X, Trophy, Calendar, Newspaper, ChevronRight } from 'lucide-react-native';
-import { useState, useEffect } from 'react';
+import { Bell, X, Trophy, Calendar, Newspaper, ChevronRight, Trash2 } from 'lucide-react-native';
+import { useState, useEffect, useRef } from 'react';
+import { Swipeable } from 'react-native-gesture-handler';
 import { useAuth } from '../contexts/AuthContext';
 import {
   getNotificationsForUser,
   markNotificationAsRead,
   markAllNotificationsAsRead,
   getUnreadNotificationCount,
+  deleteNotification,
 } from '../firebase/services/notificationService';
 import { Notification } from '../firebase/types';
 import { formatDistanceToNow } from 'date-fns';
@@ -21,6 +23,7 @@ export default function NotificationsScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const swipeableRefs = useRef<{ [key: string]: Swipeable | null }>({});
 
   const loadNotifications = async () => {
     if (!currentUserId) return;
@@ -65,7 +68,7 @@ export default function NotificationsScreen() {
 
     // Navigate based on notification type
     if (notification.type === 'match_scheduled' && notification.matchId) {
-      router.push(`/match-details?id=${notification.matchId}`);
+      router.push(`/(tabs)/league`);
     } else if (notification.type === 'news_released' && notification.newsId) {
       router.push(`/(tabs)/news`);
     } else if (notification.type === 'ranking_changed' && notification.seasonId) {
@@ -83,6 +86,34 @@ export default function NotificationsScreen() {
     } catch (error) {
       console.error('Error marking all as read:', error);
     }
+  };
+
+  const handleDeleteNotification = async (notification: Notification) => {
+    try {
+      await deleteNotification(notification.id);
+      setNotifications((prev) => prev.filter((n) => n.id !== notification.id));
+      // Update unread count if the deleted notification was unread
+      if (!notification.read) {
+        setUnreadCount((prev) => Math.max(0, prev - 1));
+      }
+    } catch (error) {
+      console.error('Error deleting notification:', error);
+    }
+  };
+
+  const renderRightActions = (notification: Notification) => {
+    return (
+      <TouchableOpacity
+        style={styles.deleteAction}
+        onPress={() => {
+          swipeableRefs.current[notification.id]?.close();
+          handleDeleteNotification(notification);
+        }}
+      >
+        <Trash2 color="#FFFFFF" size={20} />
+        <Text style={styles.deleteActionText}>Delete</Text>
+      </TouchableOpacity>
+    );
   };
 
   const getNotificationIcon = (type: string) => {
@@ -160,24 +191,32 @@ export default function NotificationsScreen() {
           </View>
         ) : (
           notifications.map((notification) => (
-            <TouchableOpacity
+            <Swipeable
               key={notification.id}
-              style={[styles.notificationCard, !notification.read && styles.unreadCard]}
-              onPress={() => handleNotificationPress(notification)}
+              ref={(ref) => {
+                swipeableRefs.current[notification.id] = ref;
+              }}
+              renderRightActions={() => renderRightActions(notification)}
+              rightThreshold={40}
             >
-              <View style={styles.notificationIcon}>
-                {getNotificationIcon(notification.type)}
-              </View>
-              <View style={styles.notificationContent}>
-                <View style={styles.notificationHeader}>
-                  <Text style={styles.notificationTitle}>{notification.title}</Text>
-                  {!notification.read && <View style={styles.unreadDot} />}
+              <TouchableOpacity
+                style={[styles.notificationCard, !notification.read && styles.unreadCard]}
+                onPress={() => handleNotificationPress(notification)}
+              >
+                <View style={styles.notificationIcon}>
+                  {getNotificationIcon(notification.type)}
                 </View>
-                <Text style={styles.notificationMessage}>{notification.message}</Text>
-                <Text style={styles.notificationDate}>{formatDate(notification.createdAt)}</Text>
-              </View>
-              <ChevronRight color="#9CA3AF" size={20} />
-            </TouchableOpacity>
+                <View style={styles.notificationContent}>
+                  <View style={styles.notificationHeader}>
+                    <Text style={styles.notificationTitle}>{notification.title}</Text>
+                    {!notification.read && <View style={styles.unreadDot} />}
+                  </View>
+                  <Text style={styles.notificationMessage}>{notification.message}</Text>
+                  <Text style={styles.notificationDate}>{formatDate(notification.createdAt)}</Text>
+                </View>
+                <ChevronRight color="#9CA3AF" size={20} />
+              </TouchableOpacity>
+            </Swipeable>
           ))
         )}
       </ScrollView>
@@ -303,6 +342,21 @@ const styles = StyleSheet.create({
   notificationDate: {
     fontSize: 12,
     color: '#9CA3AF',
+  },
+  deleteAction: {
+    backgroundColor: '#EF4444',
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 80,
+    borderRadius: 12,
+    marginBottom: 12,
+    paddingHorizontal: 16,
+    gap: 4,
+  },
+  deleteActionText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
   },
 });
 

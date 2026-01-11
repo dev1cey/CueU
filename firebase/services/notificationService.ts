@@ -5,49 +5,19 @@ import {
   getDocs,
   addDoc,
   updateDoc,
+  deleteDoc,
   query,
   where,
   orderBy,
   limit,
   Timestamp,
 } from 'firebase/firestore';
-import * as Notifications from 'expo-notifications';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { db } from '../config';
 import { Notification, NotificationType, User } from '../types';
 
-const NOTIFICATIONS_ENABLED_KEY = '@cueu:notifications_enabled';
-
 const NOTIFICATIONS_COLLECTION = 'notifications';
 
-// Configure notification handler
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-  }),
-});
-
-// Request notification permissions
-export const requestNotificationPermissions = async (): Promise<boolean> => {
-  try {
-    const { status: existingStatus } = await Notifications.getPermissionsAsync();
-    let finalStatus = existingStatus;
-    
-    if (existingStatus !== 'granted') {
-      const { status } = await Notifications.requestPermissionsAsync();
-      finalStatus = status;
-    }
-    
-    return finalStatus === 'granted';
-  } catch (error) {
-    console.error('Error requesting notification permissions:', error);
-    return false;
-  }
-};
-
-// Create a notification in Firestore and send local notification
+// Create a notification in Firestore
 export const createNotification = async (
   userId: string,
   type: NotificationType,
@@ -82,33 +52,6 @@ export const createNotification = async (
     };
 
     const docRef = await addDoc(notificationsRef, newNotification);
-
-    // Send local notification if user has notifications enabled and permissions are granted
-    try {
-      const notificationsEnabled = await AsyncStorage.getItem(NOTIFICATIONS_ENABLED_KEY);
-      const isEnabled = notificationsEnabled !== 'false'; // Default to true if not set
-      
-      if (isEnabled) {
-        const hasPermission = await requestNotificationPermissions();
-        if (hasPermission) {
-          await Notifications.scheduleNotificationAsync({
-            content: {
-              title,
-              body: message,
-              data: {
-                notificationId: docRef.id,
-                type,
-                ...data,
-              },
-            },
-            trigger: null, // Show immediately
-          });
-        }
-      }
-    } catch (error) {
-      // Don't fail notification creation if local notification fails
-      console.error('Error sending local notification:', error);
-    }
 
     return docRef.id;
   } catch (error) {
@@ -212,9 +155,7 @@ export const markAllNotificationsAsRead = async (userId: string): Promise<void> 
 export const deleteNotification = async (notificationId: string): Promise<void> => {
   try {
     const notificationRef = doc(db, NOTIFICATIONS_COLLECTION, notificationId);
-    await updateDoc(notificationRef, { read: true }); // Soft delete by marking as read
-    // Or use deleteDoc if you want hard delete:
-    // await deleteDoc(notificationRef);
+    await deleteDoc(notificationRef);
   } catch (error) {
     console.error('Error deleting notification:', error);
     throw error;

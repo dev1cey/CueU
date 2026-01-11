@@ -1,63 +1,20 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, Alert, Modal, Pressable, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Modal, Pressable, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { User, Bell, LogOut, ChevronRight, ChevronDown } from 'lucide-react-native';
+import { User, LogOut, ChevronRight, ChevronDown } from 'lucide-react-native';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
 import { CommonActions, useNavigation } from '@react-navigation/native';
 import { getAllUsers } from '../../firebase/services';
 import { User as UserType } from '../../firebase/types';
-import { requestNotificationPermissions } from '../../firebase/services/notificationService';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-
-const NOTIFICATIONS_ENABLED_KEY = '@cueu:notifications_enabled';
 
 export default function SettingsTab() {
-  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [showUserPicker, setShowUserPicker] = useState(false);
   const [allUsers, setAllUsers] = useState<UserType[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
   const router = useRouter();
   const { currentUser, logout, switchUser } = useAuth();
   const navigation = useNavigation();
-
-  // Load notification preference on mount
-  useEffect(() => {
-    loadNotificationPreference();
-  }, []);
-
-  const loadNotificationPreference = async () => {
-    try {
-      const value = await AsyncStorage.getItem(NOTIFICATIONS_ENABLED_KEY);
-      if (value !== null) {
-        setNotificationsEnabled(value === 'true');
-      }
-    } catch (error) {
-      console.error('Error loading notification preference:', error);
-    }
-  };
-
-  const handleNotificationToggle = async (value: boolean) => {
-    try {
-      await AsyncStorage.setItem(NOTIFICATIONS_ENABLED_KEY, value.toString());
-      setNotificationsEnabled(value);
-      
-      if (value) {
-        // Request permissions when enabling
-        const granted = await requestNotificationPermissions();
-        if (!granted) {
-          Alert.alert(
-            'Permission Required',
-            'Please enable notifications in your device settings to receive notifications.',
-            [{ text: 'OK' }]
-          );
-        }
-      }
-    } catch (error) {
-      console.error('Error saving notification preference:', error);
-      Alert.alert('Error', 'Failed to update notification settings.');
-    }
-  };
 
   // Check if current user is a test user (email contains 'test' or name contains 'test')
   const isTestUser = currentUser && (
@@ -199,24 +156,6 @@ export default function SettingsTab() {
           </View>
         )}
 
-        {/* Preferences Section */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>PREFERENCES</Text>
-          <View style={styles.card}>
-            <View style={styles.menuItem}>
-              <View style={styles.menuItemLeft}>
-                <Bell color="#7C3AED" size={20} />
-                <Text style={styles.menuItemTitle}>Notifications</Text>
-              </View>
-              <Switch
-                value={notificationsEnabled}
-                onValueChange={handleNotificationToggle}
-                trackColor={{ false: '#D1D5DB', true: '#C4B5FD' }}
-                thumbColor={notificationsEnabled ? '#7C3AED' : '#F3F4F6'}
-              />
-            </View>
-          </View>
-        </View>
 
         {/* Logout Button */}
         <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
