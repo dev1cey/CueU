@@ -65,18 +65,20 @@ export const createNotification = async (
     const notificationsRef = collection(db, NOTIFICATIONS_COLLECTION);
     const now = Timestamp.now();
 
+    // Build notification object, only including fields that are defined
+    // Firebase doesn't allow undefined values in documents
     const newNotification: Omit<Notification, 'id'> = {
       userId,
       type,
       title,
       message,
       read: false,
-      matchId: data?.matchId,
-      newsId: data?.newsId,
-      seasonId: data?.seasonId,
-      oldRank: data?.oldRank,
-      newRank: data?.newRank,
       createdAt: now,
+      ...(data?.matchId !== undefined && { matchId: data.matchId }),
+      ...(data?.newsId !== undefined && { newsId: data.newsId }),
+      ...(data?.seasonId !== undefined && { seasonId: data.seasonId }),
+      ...(data?.oldRank !== undefined && { oldRank: data.oldRank }),
+      ...(data?.newRank !== undefined && { newRank: data.newRank }),
     };
 
     const docRef = await addDoc(notificationsRef, newNotification);

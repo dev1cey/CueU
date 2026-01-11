@@ -4,7 +4,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ChevronLeft, X, Flag } from 'lucide-react-native';
 import { useState, useEffect } from 'react';
 import { Match, User } from '../firebase/types';
-import { getUserById, getMatchById, createMatchReport, hasUserReportedMatch } from '../firebase/services';
+import { getUserById, getMatchById, createMatchReport, hasUserReportedMatch, acceptByeMatch } from '../firebase/services';
 import { getRacksNeeded } from '../firebase/utils/handicapUtils';
 import { useActiveSeason } from '../hooks/useSeasons';
 import { useAuth } from '../contexts/AuthContext';
@@ -26,6 +26,7 @@ export default function MatchDetails() {
   const [reportMessage, setReportMessage] = useState('');
   const [submittingReport, setSubmittingReport] = useState(false);
   const [hasExistingReport, setHasExistingReport] = useState(false);
+  const [acceptingBye, setAcceptingBye] = useState(false);
 
   useEffect(() => {
     const loadMatchDetails = async () => {
@@ -45,13 +46,23 @@ export default function MatchDetails() {
 
         setMatch(matchData);
 
+        // Check if this is a bye match (player1Id === player2Id)
+        const isByeMatch = matchData.player1Id === matchData.player2Id;
+        
         // Load players first (required), then reports separately (non-blocking)
-        const [p1, p2] = await Promise.all([
-          getUserById(matchData.player1Id),
-          getUserById(matchData.player2Id),
-        ]);
-        setPlayer1Data(p1);
-        setPlayer2Data(p2);
+        if (isByeMatch) {
+          // For bye matches, both players are the same
+          const player = await getUserById(matchData.player1Id);
+          setPlayer1Data(player);
+          setPlayer2Data(player);
+        } else {
+          const [p1, p2] = await Promise.all([
+            getUserById(matchData.player1Id),
+            getUserById(matchData.player2Id),
+          ]);
+          setPlayer1Data(p1);
+          setPlayer2Data(p2);
+        }
         
         // Check if current user has already reported this match (any status)
         // Don't block match details if this check fails
@@ -169,6 +180,9 @@ export default function MatchDetails() {
     );
   }
 
+  // Check if this is a bye match
+  const isByeMatch = match.player1Id === match.player2Id || match.status === 'bye';
+
   return (
     <View style={styles.container}>
       {/* Header */}
@@ -195,89 +209,149 @@ export default function MatchDetails() {
           <Text style={styles.seasonName}>{season?.name}</Text>
         </View>
 
-        {/* Match Handicap Info */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Match Format</Text>
-          {(() => {
-            // For completed matches, use stored values
-            const racksNeeded = match.status === 'completed' && 
-              match.player1RacksNeeded && match.player2RacksNeeded
-              ? {
-                  player1: match.player1RacksNeeded,
-                  player2: match.player2RacksNeeded
-                }
-              : getRacksNeeded(
-                  player1Data.skillLevelNum,
-                  player2Data.skillLevelNum
-                );
-            
-            const isPlayer1CurrentUser = match.player1Id === currentUserId;
-            const opponentName = isPlayer1CurrentUser
-              ? match.player2Name
-              : match.player1Name;
-            
-            // For completed matches, use stored skill levels
-            const opponentSkillLevel = match.status === 'completed' && 
-              match.player1SkillLevel && match.player2SkillLevel
-              ? (isPlayer1CurrentUser ? match.player2SkillLevel : match.player1SkillLevel)
-              : (isPlayer1CurrentUser ? player2Data.skillLevelNum : player1Data.skillLevelNum);
-            
-            const currentUserRacks = isPlayer1CurrentUser
-              ? racksNeeded.player1
-              : racksNeeded.player2;
-            const opponentRacks = isPlayer1CurrentUser
-              ? racksNeeded.player2
-              : racksNeeded.player1;
-
-            return (
-              <View style={styles.handicapCard}>
-                <Text style={styles.handicapPlayerName}>
-                  Opponent: {opponentName} (Skill Level {opponentSkillLevel})
-                </Text>
-
-                <Text style={styles.handicapRacks}>
-                  Racks to win — You: {currentUserRacks}   |   {opponentName}: {opponentRacks}
-                </Text>
-              </View>
-            );
-          })()}
-        </View>
-
-        {/* Opponent Contact Info */}
-        {(() => {
-          const isPlayer1 = match.player1Id === currentUserId;
-          const opponent = isPlayer1 ? player2Data : player1Data;
-          
-          return (
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Opponent Contact</Text>
-              <View style={styles.contactCard}>
-                <Text style={styles.contactName}>{opponent.name}</Text>
-                {opponent.email && (
-                  <View style={styles.contactItem}>
-                    <Text style={styles.contactLabel}>Email:</Text>
-                    <Text style={styles.contactValue}>{opponent.email}</Text>
-                  </View>
-                )}
-                {opponent.phone && (
-                  <View style={styles.contactItem}>
-                    <Text style={styles.contactLabel}>Phone:</Text>
-                    <Text style={styles.contactValue}>{opponent.phone}</Text>
-                  </View>
-                )}
-                {opponent.wechat && (
-                  <View style={styles.contactItem}>
-                    <Text style={styles.contactLabel}>WeChat:</Text>
-                    <Text style={styles.contactValue}>{opponent.wechat}</Text>
-                  </View>
-                )}
-                {!opponent.phone && !opponent.wechat && !opponent.email && (
-                  <Text style={styles.noContactInfo}>No contact information available</Text>
-                )}
-              </View>
+        {isByeMatch ? (
+          /* Bye Match Info */
+          <View style={styles.section}>
+            <View style={styles.byeMatchCard}>
+              <Text style={styles.byeMatchTitle}>BYE WEEK</Text>
+              <Text style={styles.byeMatchDescription}>
+                You have a bye for this week's matchup. This means you don't have an opponent due to an odd number of players in the season.
+              </Text>
+              <Text style={styles.byeMatchPoints}>
+                You will receive full points (10) for this week.
+              </Text>
+              {match.status === 'bye' && (
+                <TouchableOpacity
+                  style={styles.acceptByeButton}
+                  onPress={async () => {
+                    try {
+                      setAcceptingBye(true);
+                      await acceptByeMatch(match.id);
+                      Alert.alert('Success', 'Bye match accepted! You received 10 points.', [
+                        { text: 'OK', onPress: () => router.back() }
+                      ]);
+                    } catch (error) {
+                      console.error('Error accepting bye match:', error);
+                      Alert.alert(
+                        'Error',
+                        error instanceof Error ? error.message : 'Failed to accept bye match. Please try again.'
+                      );
+                    } finally {
+                      setAcceptingBye(false);
+                    }
+                  }}
+                  disabled={acceptingBye}
+                >
+                  <Text style={styles.acceptByeButtonText}>
+                    {acceptingBye ? 'Accepting...' : 'Accept Bye'}
+                  </Text>
+                </TouchableOpacity>
+              )}
+              {match.status === 'completed' && (
+                <View style={styles.completedByeBadge}>
+                  <Text style={styles.completedByeText}>Bye Match Accepted</Text>
+                  {match.player1Points !== undefined && (
+                    <Text style={styles.completedByePoints}>
+                      Points Earned: {match.player1Points.toFixed(1)}
+                    </Text>
+                  )}
+                </View>
+              )}
             </View>
-          );
-        })()}
+          </View>
+        ) : (
+          <>
+            {/* Match Handicap Info */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Match Format</Text>
+              {(() => {
+                // For completed matches, use stored values
+                const racksNeeded = match.status === 'completed' && 
+                  match.player1RacksNeeded && match.player2RacksNeeded
+                  ? {
+                      player1: match.player1RacksNeeded,
+                      player2: match.player2RacksNeeded
+                    }
+                  : getRacksNeeded(
+                      player1Data.skillLevelNum,
+                      player2Data.skillLevelNum
+                    );
+                
+                const isPlayer1CurrentUser = match.player1Id === currentUserId;
+                const opponentName = isPlayer1CurrentUser
+                  ? match.player2Name
+                  : match.player1Name;
+                
+                // For completed matches, use stored skill levels
+                const opponentSkillLevel = match.status === 'completed' && 
+                  match.player1SkillLevel && match.player2SkillLevel
+                  ? (isPlayer1CurrentUser ? match.player2SkillLevel : match.player1SkillLevel)
+                  : (isPlayer1CurrentUser ? player2Data.skillLevelNum : player1Data.skillLevelNum);
+                
+                const currentUserRacks = isPlayer1CurrentUser
+                  ? racksNeeded.player1
+                  : racksNeeded.player2;
+                const opponentRacks = isPlayer1CurrentUser
+                  ? racksNeeded.player2
+                  : racksNeeded.player1;
+
+                return (
+                  <View style={styles.handicapCard}>
+                    <Text style={styles.handicapPlayerName}>
+                      Opponent: {opponentName} (Skill Level {opponentSkillLevel})
+                    </Text>
+
+                    <Text style={styles.handicapRacks}>
+                      Racks to win — You: {currentUserRacks}   |   {opponentName}: {opponentRacks}
+                    </Text>
+                  </View>
+                );
+              })()}
+            </View>
+
+            {/* Opponent Contact Info */}
+            {(() => {
+              const isPlayer1 = match.player1Id === currentUserId;
+              const opponent = isPlayer1 ? player2Data : player1Data;
+              
+              return (
+                <View style={styles.section}>
+                  <Text style={styles.sectionTitle}>Opponent Contact</Text>
+                  <View style={styles.contactCard}>
+                    <Text style={styles.contactName}>{opponent.name}</Text>
+                    {opponent.email && (
+                      <View style={styles.contactItem}>
+                        <Text style={styles.contactLabel}>Email:</Text>
+                        <Text style={styles.contactValue}>{opponent.email}</Text>
+                      </View>
+                    )}
+                    {opponent.phone && (
+                      <View style={styles.contactItem}>
+                        <Text style={styles.contactLabel}>Phone:</Text>
+                        <Text style={styles.contactValue}>{opponent.phone}</Text>
+                      </View>
+                    )}
+                    {opponent.wechat && (
+                      <View style={styles.contactItem}>
+                        <Text style={styles.contactLabel}>WeChat:</Text>
+                        <Text style={styles.contactValue}>{opponent.wechat}</Text>
+                      </View>
+                    )}
+                    {opponent.discord && (
+                      <View style={styles.contactItem}>
+                        <Text style={styles.contactLabel}>Discord:</Text>
+                        <Text style={styles.contactValue}>{opponent.discord}</Text>
+                      </View>
+                    )}
+                    {!opponent.phone && !opponent.wechat && !opponent.email && !opponent.discord && (
+                      <Text style={styles.noContactInfo}>No contact information available</Text>
+                    )}
+                  </View>
+                </View>
+              );
+            })()}
+          </>
+        )}
 
         {/* Match Result (for completed matches) */}
         {match.status === 'completed' && (
@@ -743,6 +817,63 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 16,
     fontWeight: '600',
+  },
+  byeMatchCard: {
+    backgroundColor: '#FEF3C7',
+    borderRadius: 8,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#FCD34D',
+  },
+  byeMatchTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#92400E',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  byeMatchDescription: {
+    fontSize: 14,
+    color: '#78350F',
+    marginBottom: 12,
+    lineHeight: 20,
+  },
+  byeMatchPoints: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#92400E',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  acceptByeButton: {
+    backgroundColor: '#7C3AED',
+    borderRadius: 8,
+    padding: 16,
+    alignItems: 'center',
+  },
+  acceptByeButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  completedByeBadge: {
+    backgroundColor: '#ECFDF5',
+    borderRadius: 8,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#10B981',
+    alignItems: 'center',
+  },
+  completedByeText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#10B981',
+    marginBottom: 4,
+  },
+  completedByePoints: {
+    fontSize: 14,
+    color: '#059669',
+    fontWeight: '500',
   },
 });
 

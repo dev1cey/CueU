@@ -10,6 +10,7 @@
 
 import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, getDocs, addDoc, Timestamp } from 'firebase/firestore';
+import { getSeasonWeekInfo } from '../utils/seasonUtils';
 
 // Firebase configuration
 const firebaseConfig = {
@@ -122,7 +123,10 @@ async function addCustomTestMatch(player1Query: string, player2Query: string) {
       player1Name: player1.name,
       player2Name: player2.name,
       seasonId: testSeason.id,
-      weekNumber: testSeason.currentWeek || 1,
+      weekNumber: (() => {
+        const { currentWeek } = getSeasonWeekInfo(testSeason);
+        return currentWeek || 1;
+      })(),
     });
     
     console.log(`✅ Successfully created test match with ID: ${matchId}`);
@@ -130,7 +134,10 @@ async function addCustomTestMatch(player1Query: string, player2Query: string) {
     console.log(`  Player 1: ${player1.name} (Skill Level: ${player1.skillLevelNum})`);
     console.log(`  Player 2: ${player2.name} (Skill Level: ${player2.skillLevelNum})`);
     console.log(`  Season: ${testSeason.name}`);
-    console.log(`  Week: ${testSeason.currentWeek || 1}`);
+    console.log(`  Week: ${(() => {
+      const { currentWeek } = getSeasonWeekInfo(testSeason);
+      return currentWeek || 1;
+    })()}`);
     console.log(`  Status: planned`);
     
   } catch (error) {

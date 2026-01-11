@@ -9,6 +9,7 @@ import { initializeApp } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
 import { getAllUsers } from '../services/userService';
 import { getAllSeasons } from '../services/seasonService';
+import { getSeasonWeekInfo } from '../utils/seasonUtils';
 
 // Firebase configuration
 const firebaseConfig = {
@@ -60,9 +61,10 @@ async function listUsers() {
     console.log('━'.repeat(80));
     
     allSeasons.forEach((season, index) => {
+      const { currentWeek, totalWeeks } = getSeasonWeekInfo(season);
       console.log(`${index + 1}. ${season.name}`);
       console.log(`   Status: ${season.status}`);
-      console.log(`   Week: ${season.currentWeek} / ${season.totalWeeks}`);
+      console.log(`   Week: ${currentWeek} / ${totalWeeks}`);
       console.log(`   Players: ${season.playerIds.length}`);
       console.log('━'.repeat(80));
     });

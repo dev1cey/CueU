@@ -5,11 +5,12 @@ import { Trophy, Calendar, Users, X, Flag } from 'lucide-react-native';
 import { useActiveSeason } from '../../hooks/useSeasons';
 import { useSeasonTopPlayers } from '../../hooks/useUsers';
 import { useAuth } from '../../contexts/AuthContext';
-import { registerForSeason, completeMatch, getUserById, createMatchReport, getReportsByMatchId } from '../../firebase/services';
+import { registerForSeason, completeMatch, getUserById, createMatchReport, getReportsByMatchId, acceptByeMatch, forfeitMatch } from '../../firebase/services';
 import { useState, useEffect } from 'react';
 import { useUpcomingMatches } from '../../hooks/useMatches';
 import { Match, User } from '../../firebase/types';
 import { getRacksNeeded } from '../../firebase/utils/handicapUtils';
+import { getSeasonWeekInfo } from '../../firebase/utils/seasonUtils';
 
 export default function LeagueTab() {
   const router = useRouter();
@@ -42,8 +43,24 @@ export default function LeagueTab() {
   const [reportMessage, setReportMessage] = useState('');
   const [submittingReport, setSubmittingReport] = useState(false);
   const [hasExistingReport, setHasExistingReport] = useState(false);
+  const [forfeiting, setForfeiting] = useState(false);
+  
+  // State for score submission modal
+  const [scoreModalVisible, setScoreModalVisible] = useState(false);
+  const [pendingScoreModalOpen, setPendingScoreModalOpen] = useState(false);
+  
+  // Open score modal after match modal closes
+  useEffect(() => {
+    if (pendingScoreModalOpen && !modalVisible) {
+      setScoreModalVisible(true);
+      setPendingScoreModalOpen(false);
+    }
+  }, [modalVisible, pendingScoreModalOpen]);
 
   const loading = seasonLoading || playersLoading;
+
+  // Calculate week info dynamically
+  const { currentWeek, totalWeeks } = getSeasonWeekInfo(season);
 
   // Determine user's registration status
   const isEnrolled = season && currentUserId ? season.playerIds.includes(currentUserId) : false;
@@ -119,6 +136,12 @@ export default function LeagueTab() {
     } finally {
       setLoadingMatchDetails(false);
     }
+  };
+
+  const handleOpenScoreModal = () => {
+    // Close match details modal first, then open score modal via useEffect
+    setPendingScoreModalOpen(true);
+    setModalVisible(false);
   };
 
   const handleSubmitScore = async () => {
@@ -230,8 +253,11 @@ export default function LeagueTab() {
       });
       
       Alert.alert('Success', 'Match completed successfully!');
+      setScoreModalVisible(false);
       setModalVisible(false);
       setSelectedMatch(null);
+      setPlayer1Score('');
+      setPlayer2Score('');
       
       // Refetch data
       await Promise.all([refetchMatches(), refetchSeason()]);
@@ -281,6 +307,132 @@ export default function LeagueTab() {
     } finally {
       setSubmittingReport(false);
     }
+  };
+
+  const handleForfeitMatch = async () => {
+    if (!selectedMatch || !currentUserId) return;
+
+    Alert.alert(
+      'Forfeit Match',
+      'Are you sure you want to forfeit this match? Your opponent will receive full points and you will receive 0 points.',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Forfeit',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setForfeiting(true);
+              await forfeitMatch(selectedMatch.id, currentUserId);
+              
+              Alert.alert('Success', 'Match forfeited. Your opponent has been awarded the win.');
+              setScoreModalVisible(false);
+              setModalVisible(false);
+              setSelectedMatch(null);
+              
+              // Refetch data
+              await Promise.all([refetchMatches(), refetchSeason()]);
+            } catch (error) {
+              console.error('Error forfeiting match:', error);
+              Alert.alert(
+                'Error',
+                error instanceof Error ? error.message : 'Failed to forfeit match. Please try again.'
+              );
+            } finally {
+              setForfeiting(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleReportOpponentNotResponding = async () => {
+    if (!selectedMatch || !currentUserId || !currentUser) return;
+
+    const isPlayer1 = selectedMatch.player1Id === currentUserId;
+    const opponentId = isPlayer1 ? selectedMatch.player2Id : selectedMatch.player1Id;
+    const opponentName = isPlayer1 ? selectedMatch.player2Name : selectedMatch.player1Name;
+
+    Alert.alert(
+      'Report Opponent Not Responding',
+      `Report that ${opponentName} is not responding and unable to schedule the match?`,
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Report',
+          onPress: async () => {
+            try {
+              setSubmittingReport(true);
+              
+              // Create match report
+              await createMatchReport({
+                matchId: selectedMatch.id,
+                reportedBy: currentUserId,
+                reportedByName: currentUser.name,
+                message: `Opponent ${opponentName} is not responding and unable to schedule the match.`,
+              });
+              
+              // After creating the report, prompt to mark opponent as forfeit
+              Alert.alert(
+                'Report Submitted',
+                `Your report has been submitted. Would you like to mark ${opponentName} as forfeit?`,
+                [
+                  {
+                    text: 'No',
+                    style: 'cancel',
+                    onPress: () => {
+                      setHasExistingReport(true);
+                    },
+                  },
+                  {
+                    text: 'Yes, Mark Forfeit',
+                    style: 'destructive',
+                    onPress: async () => {
+                      try {
+                        setForfeiting(true);
+                        // Mark the opponent as forfeiting (pass opponent's ID)
+                        await forfeitMatch(selectedMatch.id, opponentId);
+                        
+                        Alert.alert('Success', `${opponentName} has been marked as forfeit. You have been awarded the win.`);
+                        setScoreModalVisible(false);
+                        setModalVisible(false);
+                        setSelectedMatch(null);
+                        
+                        // Refetch data
+                        await Promise.all([refetchMatches(), refetchSeason()]);
+                      } catch (error) {
+                        console.error('Error marking opponent as forfeit:', error);
+                        Alert.alert(
+                          'Error',
+                          error instanceof Error ? error.message : 'Failed to mark opponent as forfeit. Please try again.'
+                        );
+                      } finally {
+                        setForfeiting(false);
+                        setSubmittingReport(false);
+                      }
+                    },
+                  },
+                ]
+              );
+            } catch (error) {
+              console.error('Error submitting report:', error);
+              Alert.alert(
+                'Error',
+                error instanceof Error ? error.message : 'Failed to submit report. Please try again.'
+              );
+              setSubmittingReport(false);
+            }
+          },
+        },
+      ]
+    );
   };
 
   const onRefresh = async () => {
@@ -370,10 +522,10 @@ export default function LeagueTab() {
               <View style={styles.infoCard}>
                 <Calendar color="#7C3AED" size={24} />
                 <Text style={styles.infoValue}>
-                  {season ? `Week ${season.currentWeek}` : 'N/A'}
+                  {season ? `Week ${currentWeek}` : 'N/A'}
                 </Text>
                 <Text style={styles.infoLabel}>
-                  {season ? `of ${season.totalWeeks}` : ''}
+                  {season ? `of ${totalWeeks}` : ''}
                 </Text>
               </View>
               <View style={styles.infoCard}>
@@ -400,6 +552,43 @@ export default function LeagueTab() {
                 {upcomingMatches.length > 0 ? (
                   <View style={styles.matchesList}>
                     {upcomingMatches.map((match) => {
+                      // Check if this is a bye match
+                      const isByeMatch = match.status === 'bye' || match.player1Id === match.player2Id;
+                      
+                      if (isByeMatch) {
+                        return (
+                          <View key={match.id} style={[styles.matchCardSimple, styles.byeMatchCard]}>
+                            <View style={styles.matchSimpleContent}>
+                              <View>
+                                <Text style={styles.matchWeekSimple}>Week {match.weekNumber}</Text>
+                                <Text style={styles.byeMatchText}>BYE WEEK</Text>
+                                <Text style={styles.byeMatchSubtext}>
+                                  You get full points (10) for this week
+                                </Text>
+                              </View>
+                              <TouchableOpacity
+                                style={styles.acceptByeButton}
+                                onPress={async () => {
+                                  try {
+                                    await acceptByeMatch(match.id);
+                                    Alert.alert('Success', 'Bye match accepted! You received 10 points.');
+                                    await Promise.all([refetchMatches(), refetchSeason()]);
+                                  } catch (error) {
+                                    console.error('Error accepting bye match:', error);
+                                    Alert.alert(
+                                      'Error',
+                                      error instanceof Error ? error.message : 'Failed to accept bye match. Please try again.'
+                                    );
+                                  }
+                                }}
+                              >
+                                <Text style={styles.acceptByeButtonText}>Accept</Text>
+                              </TouchableOpacity>
+                            </View>
+                          </View>
+                        );
+                      }
+                      
                       const opponentName = match.player1Id === currentUserId 
                         ? match.player2Name 
                         : match.player1Name;
@@ -470,14 +659,26 @@ export default function LeagueTab() {
         animationType="slide"
         transparent={true}
         visible={modalVisible}
-        onRequestClose={() => setModalVisible(false)}
+        onRequestClose={() => {
+          setPendingScoreModalOpen(false);
+          setScoreModalVisible(false);
+          setModalVisible(false);
+          setPlayer1Score('');
+          setPlayer2Score('');
+        }}
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Match Details</Text>
               <TouchableOpacity
-                onPress={() => setModalVisible(false)}
+                onPress={() => {
+                  setPendingScoreModalOpen(false);
+                  setScoreModalVisible(false);
+                  setModalVisible(false);
+                  setPlayer1Score('');
+                  setPlayer2Score('');
+                }}
                 style={styles.closeButton}
               >
                 <X color="#6B7280" size={24} />
@@ -574,10 +775,27 @@ export default function LeagueTab() {
                                 <Text style={styles.contactValue}>{opponent.wechat}</Text>
                               </View>
                             )}
-                            {!opponent.phone && !opponent.wechat && !opponent.email && (
+                            {opponent.discord && (
+                              <View style={styles.contactItem}>
+                                <Text style={styles.contactLabel}>Discord:</Text>
+                                <Text style={styles.contactValue}>{opponent.discord}</Text>
+                              </View>
+                            )}
+                            {!opponent.phone && !opponent.wechat && !opponent.email && !opponent.discord && (
                               <Text style={styles.noContactInfo}>No contact information available</Text>
                             )}
                           </View>
+                          {selectedMatch.status === 'planned' && (
+                            <TouchableOpacity
+                              style={styles.reportNotRespondingButton}
+                              onPress={handleReportOpponentNotResponding}
+                              disabled={submittingReport || forfeiting}
+                            >
+                              <Text style={styles.reportNotRespondingButtonText}>
+                                {submittingReport ? 'Reporting...' : 'Report Opponent Not Responding'}
+                              </Text>
+                            </TouchableOpacity>
+                          )}
                         </View>
                       );
                     })()}
@@ -665,7 +883,12 @@ export default function LeagueTab() {
                           </TouchableOpacity>
                           <TouchableOpacity
                             style={[styles.modalButton, styles.cancelButton]}
-                            onPress={() => setModalVisible(false)}
+                            onPress={() => {
+                              setScoreModalVisible(false);
+                              setModalVisible(false);
+                              setPlayer1Score('');
+                              setPlayer2Score('');
+                            }}
                           >
                             <Text style={styles.cancelButtonText}>Close</Text>
                           </TouchableOpacity>
@@ -673,70 +896,24 @@ export default function LeagueTab() {
                       </>
                     ) : (
                       <>
-                        {/* Score Reporting Section for Planned Matches */}
-                        <View style={styles.scoreSection}>
-                          <Text style={styles.sectionTitle}>Report Score</Text>
-                          <View style={styles.scoreInputContainer}>
-                            <View style={styles.playerScoreSection}>
-                              <Text style={[
-                                styles.modalPlayerName,
-                                selectedMatch.player1Id === currentUserId && styles.modalCurrentUser
-                              ]}>
-                                {selectedMatch.player1Name}
-                                {selectedMatch.player1Id === currentUserId && ' (You)'}
-                              </Text>
-                              <TextInput
-                                style={styles.scoreInput}
-                                placeholder="Racks won"
-                                keyboardType="number-pad"
-                                value={player1Score}
-                                onChangeText={(text) => {
-                                  // Only allow numeric input
-                                  const numericValue = text.replace(/[^0-9]/g, '');
-                                  setPlayer1Score(numericValue);
-                                }}
-                              />
-                            </View>
-
-                            <Text style={styles.modalVsText}>VS</Text>
-
-                            <View style={styles.playerScoreSection}>
-                              <Text style={[
-                                styles.modalPlayerName,
-                                selectedMatch.player2Id === currentUserId && styles.modalCurrentUser
-                              ]}>
-                                {selectedMatch.player2Name}
-                                {selectedMatch.player2Id === currentUserId && ' (You)'}
-                              </Text>
-                              <TextInput
-                                style={styles.scoreInput}
-                                placeholder="Racks won"
-                                keyboardType="number-pad"
-                                value={player2Score}
-                                onChangeText={(text) => {
-                                  // Only allow numeric input
-                                  const numericValue = text.replace(/[^0-9]/g, '');
-                                  setPlayer2Score(numericValue);
-                                }}
-                              />
-                            </View>
-                          </View>
-                        </View>
-
+                        {/* Action Buttons for Planned Matches */}
                         <View style={styles.modalButtons}>
                           <TouchableOpacity
-                            style={[styles.modalButton, styles.cancelButton]}
-                            onPress={() => setModalVisible(false)}
+                            style={[styles.modalButton, styles.forfeitButton]}
+                            onPress={handleForfeitMatch}
+                            disabled={forfeiting}
                           >
-                            <Text style={styles.cancelButtonText}>Close</Text>
+                            <Text style={styles.forfeitButtonText}>
+                              {forfeiting ? 'Forfeiting...' : 'Forfeit'}
+                            </Text>
                           </TouchableOpacity>
                           <TouchableOpacity
                             style={[styles.modalButton, styles.submitButton]}
-                            onPress={handleSubmitScore}
+                            onPress={handleOpenScoreModal}
                             disabled={submitting}
                           >
                             <Text style={styles.submitButtonText}>
-                              {submitting ? 'Submitting...' : 'Submit Score'}
+                              Submit Score
                             </Text>
                           </TouchableOpacity>
                         </View>
@@ -747,6 +924,168 @@ export default function LeagueTab() {
                   <Text style={styles.errorText}>Unable to load match details</Text>
                 )}
               </ScrollView>
+            )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* Score Submission Modal */}
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={scoreModalVisible}
+        onRequestClose={() => {
+          setPendingScoreModalOpen(false);
+          setScoreModalVisible(false);
+          setPlayer1Score('');
+          setPlayer2Score('');
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Report Score</Text>
+              <TouchableOpacity
+                onPress={() => {
+                  setPendingScoreModalOpen(false);
+                  setScoreModalVisible(false);
+                  setPlayer1Score('');
+                  setPlayer2Score('');
+                }}
+                style={styles.closeButton}
+              >
+                <X color="#6B7280" size={24} />
+              </TouchableOpacity>
+            </View>
+
+            {selectedMatch && player1Data && player2Data ? (
+              <ScrollView style={styles.modalScrollView} showsVerticalScrollIndicator={false}>
+                {/* Racks to Win Info at the top */}
+                <View style={styles.handicapSection}>
+                  <Text style={styles.sectionTitle}>Racks to Win</Text>
+                  {(() => {
+                    // For completed matches, use stored values; for planned matches, calculate from current skill levels
+                    const racksNeeded = selectedMatch.status === 'completed' && 
+                      selectedMatch.player1RacksNeeded && selectedMatch.player2RacksNeeded
+                      ? {
+                          player1: selectedMatch.player1RacksNeeded,
+                          player2: selectedMatch.player2RacksNeeded
+                        }
+                      : getRacksNeeded(
+                          player1Data.skillLevelNum,
+                          player2Data.skillLevelNum
+                        );
+                    
+                    const isPlayer1CurrentUser = selectedMatch.player1Id === currentUserId;
+                    const opponentName = isPlayer1CurrentUser
+                      ? selectedMatch.player2Name
+                      : selectedMatch.player1Name;
+                    
+                    // For completed matches, use stored skill levels
+                    const opponentSkillLevel = selectedMatch.status === 'completed' && 
+                      selectedMatch.player1SkillLevel && selectedMatch.player2SkillLevel
+                      ? (isPlayer1CurrentUser ? selectedMatch.player2SkillLevel : selectedMatch.player1SkillLevel)
+                      : (isPlayer1CurrentUser ? player2Data.skillLevelNum : player1Data.skillLevelNum);
+                    
+                    const currentUserRacks = isPlayer1CurrentUser
+                      ? racksNeeded.player1
+                      : racksNeeded.player2;
+                    const opponentRacks = isPlayer1CurrentUser
+                      ? racksNeeded.player2
+                      : racksNeeded.player1;
+
+                    return (
+                      <View style={styles.handicapCard}>
+                        <Text style={styles.handicapPlayerName}>
+                          Opponent: {opponentName} (Skill Level {opponentSkillLevel})
+                        </Text>
+
+                        <Text style={styles.handicapRacks}>
+                          Racks to win — You: {currentUserRacks}   |   {opponentName}: {opponentRacks}
+                        </Text>
+                      </View>
+                    );
+                  })()}
+                </View>
+
+                {/* Score Input Section */}
+                <View style={styles.scoreSection}>
+                  <Text style={styles.sectionTitle}>Enter Scores</Text>
+                  <View style={styles.scoreInputContainer}>
+                    <View style={styles.playerScoreSection}>
+                      <Text style={[
+                        styles.modalPlayerName,
+                        selectedMatch.player1Id === currentUserId && styles.modalCurrentUser
+                      ]}>
+                        {selectedMatch.player1Name}
+                        {selectedMatch.player1Id === currentUserId && ' (You)'}
+                      </Text>
+                      <TextInput
+                        style={styles.scoreInput}
+                        placeholder="Racks won"
+                        keyboardType="number-pad"
+                        value={player1Score}
+                        onChangeText={(text) => {
+                          // Only allow numeric input
+                          const numericValue = text.replace(/[^0-9]/g, '');
+                          setPlayer1Score(numericValue);
+                        }}
+                      />
+                    </View>
+
+                    <Text style={styles.modalVsText}>VS</Text>
+
+                    <View style={styles.playerScoreSection}>
+                      <Text style={[
+                        styles.modalPlayerName,
+                        selectedMatch.player2Id === currentUserId && styles.modalCurrentUser
+                      ]}>
+                        {selectedMatch.player2Name}
+                        {selectedMatch.player2Id === currentUserId && ' (You)'}
+                      </Text>
+                      <TextInput
+                        style={styles.scoreInput}
+                        placeholder="Racks won"
+                        keyboardType="number-pad"
+                        value={player2Score}
+                        onChangeText={(text) => {
+                          // Only allow numeric input
+                          const numericValue = text.replace(/[^0-9]/g, '');
+                          setPlayer2Score(numericValue);
+                        }}
+                      />
+                    </View>
+                  </View>
+                </View>
+
+                <View style={styles.modalButtons}>
+                  <TouchableOpacity
+                    style={[styles.modalButton, styles.cancelButton]}
+                    onPress={() => {
+                      setPendingScoreModalOpen(false);
+                      setScoreModalVisible(false);
+                      setPlayer1Score('');
+                      setPlayer2Score('');
+                    }}
+                  >
+                    <Text style={styles.cancelButtonText}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.modalButton, styles.submitButton]}
+                    onPress={handleSubmitScore}
+                    disabled={submitting}
+                  >
+                    <Text style={styles.submitButtonText}>
+                      {submitting ? 'Submitting...' : 'Submit Score'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </ScrollView>
+            ) : (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="small" color="#7C3AED" />
+                <Text style={styles.loadingText}>Loading match details...</Text>
+              </View>
             )}
           </View>
         </View>
@@ -1065,6 +1404,32 @@ const styles = StyleSheet.create({
     color: '#9CA3AF',
     fontWeight: '500',
   },
+  byeMatchCard: {
+    backgroundColor: '#FEF3C7',
+    borderColor: '#FCD34D',
+  },
+  byeMatchText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#92400E',
+    marginTop: 4,
+  },
+  byeMatchSubtext: {
+    fontSize: 12,
+    color: '#78350F',
+    marginTop: 2,
+  },
+  acceptByeButton: {
+    backgroundColor: '#7C3AED',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 6,
+  },
+  acceptByeButtonText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '600',
+  },
   currentUserName: {
     color: '#7C3AED',
   },
@@ -1192,6 +1557,21 @@ const styles = StyleSheet.create({
     color: '#9CA3AF',
     fontStyle: 'italic',
   },
+  reportNotRespondingButton: {
+    marginTop: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: '#FEF2F2',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#FEE2E2',
+    alignItems: 'center',
+  },
+  reportNotRespondingButtonText: {
+    color: '#EF4444',
+    fontSize: 14,
+    fontWeight: '600',
+  },
   scoreSection: {
     marginBottom: 20,
   },
@@ -1260,6 +1640,16 @@ const styles = StyleSheet.create({
   },
   submitButtonText: {
     color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  forfeitButton: {
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FEE2E2',
+  },
+  forfeitButtonText: {
+    color: '#EF4444',
     fontSize: 16,
     fontWeight: '600',
   },

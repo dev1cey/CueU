@@ -10,6 +10,7 @@ import { getFirestore, collection, getDocs, query, where, limit } from 'firebase
 import { createMatch } from '../services/matchService';
 import { getActiveSeason, getAllSeasons } from '../services/seasonService';
 import { getAllUsers } from '../services/userService';
+import { getSeasonWeekInfo } from '../utils/seasonUtils';
 
 // Firebase configuration
 const firebaseConfig = {
@@ -86,7 +87,10 @@ async function addTestMatch() {
       player1Name: testUser1.name,
       player2Name: testUser2.name,
       seasonId: currentSeason.id,
-      weekNumber: currentSeason.currentWeek || 1,
+      weekNumber: (() => {
+        const { currentWeek } = getSeasonWeekInfo(currentSeason);
+        return currentWeek || 1;
+      })(),
     });
     
     console.log(`✅ Successfully created test match with ID: ${matchId}`);
@@ -94,7 +98,10 @@ async function addTestMatch() {
     console.log(`  Player 1: ${testUser1.name} (Skill Level: ${testUser1.skillLevelNum})`);
     console.log(`  Player 2: ${testUser2.name} (Skill Level: ${testUser2.skillLevelNum})`);
     console.log(`  Season: ${currentSeason.name}`);
-    console.log(`  Week: ${currentSeason.currentWeek || 1}`);
+    console.log(`  Week: ${(() => {
+      const { currentWeek } = getSeasonWeekInfo(currentSeason);
+      return currentWeek || 1;
+    })()}`);
     console.log(`  Status: planned`);
     
   } catch (error) {

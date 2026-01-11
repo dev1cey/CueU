@@ -1,0 +1,6 @@
+1. some fields have issue due to updated firebase (current week display in league tab)
+2. allow user to forfeit and report opponent forfeit
+3. Update service function so if a user forfeit then their score for a match is -1
+4. withdraw from the season. And if withdrawn can be added back in again through a button like the sign up section
+5. bye match support
+6. auto fetch

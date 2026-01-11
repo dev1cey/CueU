@@ -21,7 +21,6 @@ export const createSeason = async (seasonData: {
   name: string;
   startDate: Date;
   endDate: Date;
-  totalWeeks: number;
 }): Promise<string> => {
   try {
     const seasonsRef = collection(db, SEASONS_COLLECTION);
@@ -32,11 +31,10 @@ export const createSeason = async (seasonData: {
       name: seasonData.name,
       startDate: Timestamp.fromDate(seasonData.startDate),
       endDate: Timestamp.fromDate(seasonData.endDate),
-      totalWeeks: seasonData.totalWeeks,
       status: 'upcoming' as SeasonStatus,
-      currentWeek: 0,
       totalMatches: 0,
       playerIds: [],
+      inactivePlayerIds: [],
       pendingPlayerIds: [],
       createdAt: now,
       updatedAt: now, // Extra field
@@ -142,25 +140,28 @@ export const incrementSeasonStats = async (
   }
 };
 
-// Advance season week
-export const advanceSeasonWeek = async (seasonId: string): Promise<void> => {
+// Update season status based on current date
+// Weeks are now calculated dynamically, so this function just updates status
+export const updateSeasonStatus = async (seasonId: string): Promise<void> => {
   try {
     const season = await getSeasonById(seasonId);
     if (!season) throw new Error('Season not found');
 
-    const newWeek = season.currentWeek + 1;
-    const updates: Partial<Season> = {
-      currentWeek: newWeek,
-    };
+    const now = Timestamp.now();
+    const updates: Partial<Season> = {};
 
-    // If we've reached the last week, mark season as completed
-    if (newWeek >= season.totalWeeks) {
+    // Update status based on dates
+    if (now < season.startDate) {
+      updates.status = 'upcoming';
+    } else if (now > season.endDate) {
       updates.status = 'completed';
+    } else {
+      updates.status = 'active';
     }
 
     await updateSeason(seasonId, updates);
   } catch (error) {
-    console.error('Error advancing season week:', error);
+    console.error('Error updating season status:', error);
     throw error;
   }
 };

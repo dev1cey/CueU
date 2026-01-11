@@ -235,23 +235,162 @@ export const getMatchesBySeason = async (seasonId: string): Promise<Match[]> => 
   }
 };
 
-// Get upcoming matches
+// Accept a bye match (player gets full points, no opponent)
+export const acceptByeMatch = async (matchId: string): Promise<void> => {
+  try {
+    const match = await getMatchById(matchId);
+    if (!match) throw new Error('Match not found');
+
+    // Verify this is a bye match (player1Id === player2Id)
+    if (match.player1Id !== match.player2Id) {
+      throw new Error('This is not a bye match');
+    }
+
+    // Verify match status is 'bye'
+    if (match.status !== 'bye') {
+      throw new Error('Match is not a bye match');
+    }
+
+    const playerId = match.player1Id; // Both are the same for bye matches
+    const BYE_POINTS = 10; // Full points for bye matches
+
+    // Get player data to determine skill level at match time
+    const player = await getUserById(playerId);
+    if (!player) {
+      throw new Error('Player not found');
+    }
+
+    const playerSkillLevel = player.skillLevelNum;
+
+    // Update match as completed with bye status
+    await updateMatch(matchId, {
+      status: 'completed',
+      winnerId: playerId,
+      score: { player1: 0, player2: 0 }, // No actual score for bye
+      completedDate: Timestamp.now(),
+      player1SkillLevel: playerSkillLevel,
+      player2SkillLevel: playerSkillLevel,
+      player1RacksNeeded: 0, // Not applicable for bye
+      player2RacksNeeded: 0, // Not applicable for bye
+      player1Points: BYE_POINTS,
+      player2Points: 0, // No opponent
+    });
+
+    // Get season to access playerIds for ranking calculation
+    const season = await getSeasonById(match.seasonId);
+    const seasonPlayerIds = season?.playerIds || [];
+
+    // Update season points (no wins/losses update for bye matches)
+    await updateUserSeasonPoints(playerId, match.seasonId, BYE_POINTS, seasonPlayerIds);
+  } catch (error) {
+    console.error('Error accepting bye match:', error);
+    throw error;
+  }
+};
+
+// Forfeit a match (report opponent forfeit)
+// The forfeiting user gets -1 score, the other user gets full score and points
+export const forfeitMatch = async (
+  matchId: string,
+  forfeitingUserId: string
+): Promise<void> => {
+  try {
+    const match = await getMatchById(matchId);
+    if (!match) throw new Error('Match not found');
+
+    // Verify match is in planned status
+    if (match.status !== 'planned') {
+      throw new Error('Only planned matches can be forfeited');
+    }
+
+    // Verify the user is part of this match
+    if (match.player1Id !== forfeitingUserId && match.player2Id !== forfeitingUserId) {
+      throw new Error('You are not part of this match');
+    }
+
+    // Get player data to determine skill levels
+    const player1 = await getUserById(match.player1Id);
+    const player2 = await getUserById(match.player2Id);
+    
+    if (!player1 || !player2) {
+      throw new Error('One or both players not found');
+    }
+
+    const player1SkillLevel = player1.skillLevelNum;
+    const player2SkillLevel = player2.skillLevelNum;
+
+    // Validate skill levels are in APA range (2-7)
+    if (player1SkillLevel < 2 || player1SkillLevel > 7 ||
+        player2SkillLevel < 2 || player2SkillLevel > 7) {
+      throw new Error(`Invalid skill levels: P1=${player1SkillLevel}, P2=${player2SkillLevel}. Must be between 2-7.`);
+    }
+
+    // Calculate racks needed based on handicap
+    const racksNeeded = getRacksNeeded(player1SkillLevel, player2SkillLevel);
+
+    // Determine who is forfeiting and who wins
+    const isPlayer1Forfeiting = forfeitingUserId === match.player1Id;
+    const winnerId = isPlayer1Forfeiting ? match.player2Id : match.player1Id;
+    
+    // Set scores: forfeiting user gets -1, winner gets their target racks
+    const score = {
+      player1: isPlayer1Forfeiting ? -1 : racksNeeded.player1,
+      player2: isPlayer1Forfeiting ? racksNeeded.player2 : -1,
+    };
+
+    // Winner gets full points (10), forfeiting user gets 0
+    const player1Points = isPlayer1Forfeiting ? 0 : 10;
+    const player2Points = isPlayer1Forfeiting ? 10 : 0;
+
+    // Update match with forfeit data
+    await updateMatch(matchId, {
+      winnerId,
+      score,
+      status: 'completed',
+      completedDate: Timestamp.now(),
+      player1SkillLevel,
+      player2SkillLevel,
+      player1RacksNeeded: racksNeeded.player1,
+      player2RacksNeeded: racksNeeded.player2,
+      player1Points: Math.round(player1Points * 100) / 100,
+      player2Points: Math.round(player2Points * 100) / 100,
+    });
+
+    // Get season to access playerIds for ranking calculation
+    const season = await getSeasonById(match.seasonId);
+    const seasonPlayerIds = season?.playerIds || [];
+
+    // Update player stats (wins/losses)
+    const player1Won = winnerId === match.player1Id;
+    await updateUserStats(match.player1Id, player1Won);
+    await updateUserStats(match.player2Id, !player1Won);
+
+    // Update season points (with ranking change detection)
+    await updateUserSeasonPoints(match.player1Id, match.seasonId, player1Points, seasonPlayerIds);
+    await updateUserSeasonPoints(match.player2Id, match.seasonId, player2Points, seasonPlayerIds);
+  } catch (error) {
+    console.error('Error forfeiting match:', error);
+    throw error;
+  }
+};
+
+// Get upcoming matches (includes both 'planned' and 'bye' status)
 export const getUpcomingMatches = async (userId?: string): Promise<Match[]> => {
   try {
     const matchesRef = collection(db, MATCHES_COLLECTION);
     let q;
     
     if (userId) {
-      // Get upcoming matches for specific user
+      // Get upcoming matches for specific user (both planned and bye)
       const q1 = query(
         matchesRef,
         where('player1Id', '==', userId),
-        where('status', '==', 'planned')
+        where('status', 'in', ['planned', 'bye'])
       );
       const q2 = query(
         matchesRef,
         where('player2Id', '==', userId),
-        where('status', '==', 'planned')
+        where('status', 'in', ['planned', 'bye'])
       );
       
       const [snapshot1, snapshot2] = await Promise.all([
@@ -259,14 +398,15 @@ export const getUpcomingMatches = async (userId?: string): Promise<Match[]> => {
         getDocs(q2)
       ]);
       
-      const matches: any[] = [];
+      const matchesMap = new Map<string, any>();
       snapshot1.forEach(doc => {
-        matches.push({ id: doc.id, ...doc.data() });
+        matchesMap.set(doc.id, { id: doc.id, ...doc.data() });
       });
       snapshot2.forEach(doc => {
-        matches.push({ id: doc.id, ...doc.data() });
+        matchesMap.set(doc.id, { id: doc.id, ...doc.data() });
       });
       
+      const matches = Array.from(matchesMap.values());
       return matches.sort((a, b) => {
         if (!a.scheduledDate || !b.scheduledDate) return 0;
         return a.scheduledDate.toMillis() - b.scheduledDate.toMillis();
@@ -275,7 +415,7 @@ export const getUpcomingMatches = async (userId?: string): Promise<Match[]> => {
       // Get all upcoming matches
       q = query(
         matchesRef,
-        where('status', '==', 'planned'),
+        where('status', 'in', ['planned', 'bye']),
         orderBy('scheduledDate', 'asc')
       );
       
