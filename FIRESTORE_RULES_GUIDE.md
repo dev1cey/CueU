@@ -60,7 +60,7 @@ Your Firestore database now has production-safe security rules that:
 1. **Copy the rules file**: The rules are in `firestore.rules` in your project root
 2. **Go to Firebase Console**: 
    - Navigate to https://console.firebase.google.com
-   - Select your project (`cueu-aff09`)
+   - Select your project (`cueu-f45c8`)
    - Go to Firestore Database → Rules tab
 3. **Paste the rules**: Copy the entire contents of `firestore.rules` and paste into the Firebase Console
 4. **Publish**: Click "Publish" to apply the rules

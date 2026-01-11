@@ -14,14 +14,14 @@ import { getSeasonWeekInfo } from '../utils/seasonUtils';
 
 // Firebase configuration
 const firebaseConfig = {
-  apiKey: "AIzaSyB15z05100Mb6YBifBFMpd58cOVGQyWzww",
-  authDomain: "cueu-aff09.firebaseapp.com",
-  databaseURL: "https://cueu-aff09-default-rtdb.firebaseio.com",
-  projectId: "cueu-aff09",
-  storageBucket: "cueu-aff09.firebasestorage.app",
-  messagingSenderId: "361114924548",
-  appId: "1:361114924548:web:93b61872e5747d967c6751",
-  measurementId: "G-2DHLSJL6D2"
+  apiKey: "AIzaSyAJDyt_24Mz87uByZVxkHUOYdnxLGSaOJ0",
+  authDomain: "cueu-f45c8.firebaseapp.com",
+  databaseURL: "https://cueu-f45c8-default-rtdb.firebaseio.com",
+  projectId: "cueu-f45c8",
+  storageBucket: "cueu-f45c8.firebasestorage.app",
+  messagingSenderId: "986847597138",
+  appId: "1:986847597138:web:47be161543ae57ef38858b",
+  measurementId: "G-D1BK1C339S"
 };
 
 // Initialize Firebase

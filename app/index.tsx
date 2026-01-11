@@ -19,7 +19,7 @@ export default function AuthScreen() {
   // Set up Google OAuth for mobile using expo-auth-session
   // Use the iOS Client ID with the native redirect URI format
   // This bypasses the Expo proxy and works directly with Google's iOS Client
-  const redirectUri = 'com.googleusercontent.apps.361114924548-fmii3vq7m3jthnkea85ta6f55sfbuh6h:/oauth2redirect/google';
+  const redirectUri = 'com.googleusercontent.apps.986847597138-68pu4d4eqk96imlv8tmk20udqtosntr0:/oauth2redirect/google';
   
   const [request, response, promptAsync] = Google.useIdTokenAuthRequest({
     clientId: GOOGLE_OAUTH_IOS_CLIENT_ID,
@@ -134,15 +134,26 @@ export default function AuthScreen() {
       try {
         await signInWithEmailAndPassword(auth, userEmail, TEST_PASSWORD);
       } catch (authError: any) {
-        // If test account doesn't exist, show helpful error
-        if (authError?.code === 'auth/user-not-found' || authError?.code === 'auth/wrong-password' || authError?.code === 'auth/invalid-email') {
+        // Handle specific error codes
+        if (authError?.code === 'auth/operation-not-allowed') {
           Alert.alert(
-            'Test Account Setup Required',
-            `To use Skip Login, please create a Firebase Auth user:\n\nEmail: ${userEmail}\nPassword: ${TEST_PASSWORD}\n\nGo to Firebase Console → Authentication → Add User\n\nAlternatively, enable Anonymous Authentication in Firebase Console.`,
+            'Email/Password Authentication Not Enabled',
+            `Email/Password authentication is not enabled in your Firebase project.\n\nTo fix this:\n1. Go to Firebase Console → Authentication → Sign-in method\n2. Click on "Email/Password"\n3. Enable "Email/Password" provider\n4. Click "Save"\n\nAlternatively, you can use Google Sign-In instead.`,
             [{ text: 'OK' }]
           );
           return;
         }
+        
+        // auth/invalid-credential is a newer error code that covers both user-not-found and wrong-password
+        if (authError?.code === 'auth/user-not-found' || authError?.code === 'auth/wrong-password' || authError?.code === 'auth/invalid-email' || authError?.code === 'auth/invalid-credential') {
+          Alert.alert(
+            'Test Account Setup Required',
+            `To use Skip Login, please create a Firebase Auth user:\n\nEmail: ${userEmail}\nPassword: ${TEST_PASSWORD}\n\nSteps:\n1. Go to Firebase Console → Authentication → Users\n2. Click "Add user"\n3. Enter Email: ${userEmail}\n4. Enter Password: ${TEST_PASSWORD}\n5. Click "Add user"\n\nAlternatively, you can use Google Sign-In instead.`,
+            [{ text: 'OK' }]
+          );
+          return;
+        }
+        
         throw authError;
       }
       

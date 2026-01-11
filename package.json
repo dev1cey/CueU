@@ -13,7 +13,10 @@
     "run:android": "expo run:android",
     "build:ios": "eas build --platform ios",
     "build:android": "eas build --platform android",
-    "migrate": "ts-node --project tsconfig.scripts.json firebase/scripts/runMigration.ts"
+    "migrate": "ts-node --project tsconfig.scripts.json firebase/scripts/runMigration.ts",
+    "migrate:data": "ts-node --project tsconfig.scripts.json firebase/scripts/migrateData.ts",
+    "migrate:admins": "ts-node --project tsconfig.scripts.json firebase/scripts/migrateAdminsOnly.ts",
+    "test:firebase": "ts-node --project tsconfig.scripts.json firebase/scripts/testFirebaseConnection.ts"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
@@ -35,6 +38,7 @@
     "expo-status-bar": "~3.0.9",
     "expo-web-browser": "~15.0.10",
     "firebase": "^12.7.0",
+    "firebase-admin": "^13.6.0",
     "lucide-react-native": "^0.562.0",
     "react": "19.1.0",
     "react-dom": "19.1.0",
@@ -57,5 +61,9 @@
     "ts-node": "^10.9.2",
     "typescript": "^5.3.3"
   },
-  "private": true
+  "private": true,
+  "description": "A React Native mobile application for the University of Washington Pool Club, built with Expo. This app helps students connect, compete, and engage with the pool community on campus.",
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
 }

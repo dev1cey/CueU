@@ -9,7 +9,7 @@ import {
 } from 'firebase/auth';
 import { auth } from '../firebase/config';
 import { User } from '../firebase/types';
-import { getUserById, getUserByEmail } from '../firebase/services';
+import { getUserById } from '../firebase/services';
 
 const USER_STORAGE_KEY = '@cueu_current_user_id';
 
@@ -66,8 +66,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setFirebaseUser(user);
       
       if (user) {
-        // Try to load the app user from our database
-        const appUser = await getUserByEmail(user.email || '');
+        // User document ID MUST be the auth.uid (per Firestore rules)
+        // Try to load the app user from our database using auth.uid
+        const appUser = await getUserById(user.uid);
         if (appUser) {
           setCurrentUser(appUser);
           setCurrentUserId(appUser.id);
@@ -109,8 +110,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         throw new Error('Please use a valid @uw.edu email address');
       }
 
-      // Check if user exists in our database
-      const existingUser = await getUserByEmail(user.email);
+      // Check if user exists in our database using auth.uid
+      // User document ID MUST be the auth.uid (per Firestore rules)
+      const existingUser = await getUserById(user.uid);
       
       return {
         isNewUser: !existingUser,
@@ -125,7 +127,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const checkUserExists = async (email: string): Promise<User | null> => {
-    return await getUserByEmail(email);
+    // Note: This function is kept for backward compatibility
+    // But user lookups should use auth.uid directly via getUserById
+    // This email-based lookup may fail if user document ID is not email-based
+    // Consider deprecating this in favor of getUserById(auth.currentUser?.uid)
+    const user = auth.currentUser;
+    if (user) {
+      return await getUserById(user.uid);
+    }
+    return null;
   };
 
   const login = async (userId: string) => {

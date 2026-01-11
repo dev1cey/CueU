@@ -7,14 +7,14 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 // Firebase configuration
 // Replace these values with your actual Firebase project config
 const firebaseConfig = {
-  apiKey: "AIzaSyB15z05100Mb6YBifBFMpd58cOVGQyWzww",
-  authDomain: "cueu-aff09.firebaseapp.com",
-  databaseURL: "https://cueu-aff09-default-rtdb.firebaseio.com",
-  projectId: "cueu-aff09",
-  storageBucket: "cueu-aff09.firebasestorage.app",
-  messagingSenderId: "361114924548",
-  appId: "1:361114924548:web:93b61872e5747d967c6751",
-  measurementId: "G-2DHLSJL6D2"
+  apiKey: "AIzaSyAJDyt_24Mz87uByZVxkHUOYdnxLGSaOJ0",
+  authDomain: "cueu-f45c8.firebaseapp.com",
+  databaseURL: "https://cueu-f45c8-default-rtdb.firebaseio.com",
+  projectId: "cueu-f45c8",
+  storageBucket: "cueu-f45c8.firebasestorage.app",
+  messagingSenderId: "986847597138",
+  appId: "1:986847597138:web:47be161543ae57ef38858b",
+  measurementId: "G-D1BK1C339S"
 };
 
 // Initialize Firebase
@@ -31,8 +31,8 @@ export default app;
 
 // Google OAuth Client IDs for mobile platforms
 // Web OAuth Client ID (works with expo-auth-session and Expo's auth proxy)
-export const GOOGLE_OAUTH_WEB_CLIENT_ID = '361114924548-neh5h07q3kk2o46758msgg5dic7qr919.apps.googleusercontent.com';
+export const GOOGLE_OAUTH_WEB_CLIENT_ID = '986847597138-k12cs21bnavpt1523od3q4llvo4aaded.apps.googleusercontent.com';
 // iOS OAuth Client ID (for native implementation if needed in the future)
-export const GOOGLE_OAUTH_IOS_CLIENT_ID = '361114924548-fmii3vq7m3jthnkea85ta6f55sfbuh6h.apps.googleusercontent.com';
+export const GOOGLE_OAUTH_IOS_CLIENT_ID = '986847597138-68pu4d4eqk96imlv8tmk20udqtosntr0.apps.googleusercontent.com';
 // If you need Android support, create an Android OAuth Client ID in Google Cloud Console and add it here:
 // export const GOOGLE_OAUTH_ANDROID_CLIENT_ID = 'YOUR-ANDROID-CLIENT-ID.apps.googleusercontent.com';
