@@ -1,7 +1,3 @@
-import { useState, useEffect } from 'react';
-import { Match } from '../firebase/types';
-import { getMatchesForUser, getUpcomingMatches, getMatchesBySeason } from '../firebase/services';
-
 // Hook to get user's matches
 export const useUserMatches = (userId: string | null) => {
   const [matches, setMatches] = useState<Match[]>([]);
@@ -48,43 +44,28 @@ export const useUserMatches = (userId: string | null) => {
   return { matches, loading, error, refetch };
 };
 
-// Hook to get upcoming matches
+import { useData } from '../contexts/DataContext';
+import { useState, useEffect } from 'react';
+import { Match } from '../firebase/types';
+import { getMatchesForUser, getMatchesBySeason } from '../firebase/services';
+
+// Hook to get upcoming matches (uses shared DataContext)
 export const useUpcomingMatches = (userId?: string) => {
-  const [matches, setMatches] = useState<Match[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<Error | null>(null);
-
+  const { upcomingMatches, matchesLoading, matchesError, refetchMatches } = useData();
+  
+  // Update matches when userId changes - use silent refresh to avoid loading flicker
   useEffect(() => {
-    const fetchMatches = async () => {
-      try {
-        setLoading(true);
-        const matchesData = await getUpcomingMatches(userId);
-        setMatches(matchesData);
-        setError(null);
-      } catch (err) {
-        setError(err as Error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchMatches();
-  }, [userId]);
-
-  const refetch = async () => {
-    try {
-      setLoading(true);
-      const matchesData = await getUpcomingMatches(userId);
-      setMatches(matchesData);
-      setError(null);
-    } catch (err) {
-      setError(err as Error);
-    } finally {
-      setLoading(false);
+    if (userId !== undefined) {
+      refetchMatches(userId, true); // Silent refresh when userId changes
     }
-  };
+  }, [userId]); // Removed refetchMatches from dependencies - it's stable
 
-  return { matches, loading, error, refetch };
+  return { 
+    matches: upcomingMatches, 
+    loading: matchesLoading, 
+    error: matchesError, 
+    refetch: () => refetchMatches(userId) // Manual refetch shows loading
+  };
 };
 
 // Hook to get matches by season

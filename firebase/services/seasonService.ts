@@ -194,3 +194,65 @@ export const registerForSeason = async (
   }
 };
 
+// Withdraw user from season (adds to inactivePlayerIds but keeps in playerIds to preserve points)
+export const withdrawFromSeason = async (
+  seasonId: string,
+  userId: string
+): Promise<void> => {
+  try {
+    const season = await getSeasonById(seasonId);
+    if (!season) throw new Error('Season not found');
+
+    // Check if user is enrolled
+    if (!season.playerIds.includes(userId)) {
+      throw new Error('User is not enrolled in this season');
+    }
+
+    // Check if user is already inactive
+    if (season.inactivePlayerIds.includes(userId)) {
+      throw new Error('User is already inactive in this season');
+    }
+
+    // Add to inactivePlayerIds but keep in playerIds to preserve their points
+    const updatedInactivePlayerIds = [...season.inactivePlayerIds, userId];
+    
+    await updateSeason(seasonId, {
+      inactivePlayerIds: updatedInactivePlayerIds,
+    });
+  } catch (error) {
+    console.error('Error withdrawing from season:', error);
+    throw error;
+  }
+};
+
+// Re-enter user into season (removes from inactivePlayerIds, user already in playerIds)
+export const reenterSeason = async (
+  seasonId: string,
+  userId: string
+): Promise<void> => {
+  try {
+    const season = await getSeasonById(seasonId);
+    if (!season) throw new Error('Season not found');
+
+    // Check if user is inactive
+    if (!season.inactivePlayerIds.includes(userId)) {
+      throw new Error('User is not inactive in this season');
+    }
+
+    // Check if user is enrolled (they should be, since we keep them in playerIds)
+    if (!season.playerIds.includes(userId)) {
+      throw new Error('User is not enrolled in this season');
+    }
+
+    // Remove from inactivePlayerIds only (user stays in playerIds)
+    const updatedInactivePlayerIds = season.inactivePlayerIds.filter(id => id !== userId);
+    
+    await updateSeason(seasonId, {
+      inactivePlayerIds: updatedInactivePlayerIds,
+    });
+  } catch (error) {
+    console.error('Error re-entering season:', error);
+    throw error;
+  }
+};
+

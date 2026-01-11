@@ -1,44 +1,17 @@
+import { useData } from '../contexts/DataContext';
 import { useState, useEffect } from 'react';
 import { Event } from '../firebase/types';
-import { getUpcomingEvents, getAllEvents, getUserEvents } from '../firebase/services';
+import { getAllEvents, getUserEvents } from '../firebase/services';
 
-// Hook to get upcoming events
+// Hook to get upcoming events (uses shared DataContext)
 export const useUpcomingEvents = () => {
-  const [events, setEvents] = useState<Event[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<Error | null>(null);
-
-  useEffect(() => {
-    const fetchEvents = async () => {
-      try {
-        setLoading(true);
-        const eventsData = await getUpcomingEvents();
-        setEvents(eventsData);
-        setError(null);
-      } catch (err) {
-        setError(err as Error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchEvents();
-  }, []);
-
-  const refetch = async () => {
-    try {
-      setLoading(true);
-      const eventsData = await getUpcomingEvents();
-      setEvents(eventsData);
-      setError(null);
-    } catch (err) {
-      setError(err as Error);
-    } finally {
-      setLoading(false);
-    }
+  const { events, eventsLoading, eventsError, refetchEvents } = useData();
+  return { 
+    events, 
+    loading: eventsLoading, 
+    error: eventsError, 
+    refetch: refetchEvents 
   };
-
-  return { events, loading, error, refetch };
 };
 
 // Hook to get all events

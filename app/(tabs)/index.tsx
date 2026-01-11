@@ -2,14 +2,14 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Calendar, MapPin, Trophy, Bell, ChevronRight } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { useSeasonTopPlayers } from '../../hooks/useUsers';
 import { useUpcomingEvents } from '../../hooks/useEvents';
 import { useActiveSeason } from '../../hooks/useSeasons';
 import { useAuth } from '../../contexts/AuthContext';
 import { useUpcomingMatches } from '../../hooks/useMatches';
-import { useState, useEffect } from 'react';
-import { getUnreadNotificationCount } from '../../firebase/services/notificationService';
+import { useData } from '../../contexts/DataContext';
+import { useState, useEffect, useCallback, useRef } from 'react';
 
 interface QuickStat {
   label: string;
@@ -22,22 +22,17 @@ export default function HomeTab() {
   const router = useRouter();
   const [refreshing, setRefreshing] = useState(false);
   const { season, loading: seasonLoading, refetch: refetchSeason } = useActiveSeason();
-  const { players: topPlayers, loading: playersLoading, refetch: refetchTopPlayers } = useSeasonTopPlayers(
-    season?.playerIds || null, 
-    3,
-    season?.id
-  );
-  const { events, loading: eventsLoading, refetch: refetchEvents } = useUpcomingEvents();
-  const { currentUser, currentUserId } = useAuth();
-  const { matches: upcomingMatches, loading: matchesLoading, refetch: refetchMatches } = useUpcomingMatches(currentUserId || undefined);
-  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
-
-  // Fetch all season players to calculate rank
-  const { players: allPlayers, loading: allPlayersLoading, refetch: refetchAllPlayers } = useSeasonTopPlayers(
+  // Use shared players data - get all players and slice for top 3 display
+  const { players: allPlayers, loading: playersLoading, refetch: refetchAllPlayers } = useSeasonTopPlayers(
     season?.playerIds || null,
     undefined,
     season?.id
   );
+  const topPlayers = allPlayers.slice(0, 3); // Get top 3 for display
+  const { events, loading: eventsLoading, refetch: refetchEvents } = useUpcomingEvents();
+  const { currentUser, currentUserId } = useAuth();
+  const { matches: upcomingMatches, loading: matchesLoading, refetch: refetchMatches } = useUpcomingMatches(currentUserId || undefined);
+  const { unreadNotificationCount, refetchNotificationCount, refreshAll } = useData();
 
   // Get current user's season points
   const getSeasonPoints = (user: typeof currentUser) => {
@@ -47,7 +42,7 @@ export default function HomeTab() {
 
   // Calculate current user's rank
   const calculateUserRank = () => {
-    if (!currentUser || allPlayersLoading) return '-';
+    if (!currentUser || playersLoading) return '-';
     const userIndex = allPlayers.findIndex(player => player.id === currentUser.id);
     return userIndex !== -1 ? `${userIndex + 1}` : '-';
   };
@@ -80,31 +75,28 @@ export default function HomeTab() {
   // Load unread notification count
   useEffect(() => {
     if (currentUserId) {
-      loadUnreadCount();
+      refetchNotificationCount(currentUserId);
     }
-  }, [currentUserId]);
+  }, [currentUserId, refetchNotificationCount]);
 
-  const loadUnreadCount = async () => {
-    if (!currentUserId) return;
-    try {
-      const count = await getUnreadNotificationCount(currentUserId);
-      setUnreadNotificationCount(count);
-    } catch (error) {
-      console.error('Error loading unread count:', error);
-    }
-  };
+  // Refresh data when screen comes into focus - use ref to prevent excessive calls
+  const refreshAllRef = useRef(refreshAll);
+  useEffect(() => {
+    refreshAllRef.current = refreshAll;
+  }, [refreshAll]);
+  
+  useFocusEffect(
+    useCallback(() => {
+      // Silently refresh all data when screen comes into focus to avoid flickering
+      refreshAllRef.current(currentUserId || undefined, true);
+    }, [currentUserId]) // Only depend on currentUserId, not refreshAll
+  );
 
   const onRefresh = async () => {
     setRefreshing(true);
     try {
-      await Promise.all([
-        refetchSeason(),
-        refetchTopPlayers(),
-        refetchAllPlayers(),
-        refetchEvents(),
-        refetchMatches(),
-        loadUnreadCount(),
-      ]);
+      // Use shared refreshAll which refreshes all data
+      await refreshAll(currentUserId || undefined);
     } finally {
       setRefreshing(false);
     }

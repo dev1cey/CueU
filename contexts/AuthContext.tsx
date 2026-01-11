@@ -33,6 +33,33 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Restore user session on app startup
+  useEffect(() => {
+    const restoreUserSession = async () => {
+      try {
+        // First, check if we have a stored user ID
+        const storedUserId = await AsyncStorage.getItem(USER_STORAGE_KEY);
+        
+        if (storedUserId) {
+          // Try to restore the user from our database
+          const appUser = await getUserById(storedUserId);
+          if (appUser) {
+            setCurrentUser(appUser);
+            setCurrentUserId(appUser.id);
+          } else {
+            // User not found in database, clear storage
+            await AsyncStorage.removeItem(USER_STORAGE_KEY);
+          }
+        }
+      } catch (error) {
+        console.error('Error restoring user session:', error);
+        await AsyncStorage.removeItem(USER_STORAGE_KEY);
+      }
+    };
+
+    restoreUserSession();
+  }, []);
+
   // Monitor Firebase auth state
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -45,8 +72,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           setCurrentUser(appUser);
           setCurrentUserId(appUser.id);
           await AsyncStorage.setItem(USER_STORAGE_KEY, appUser.id);
+        } else {
+          // Firebase user exists but app user doesn't - might be a new user
+          // Keep Firebase auth but clear app user state
+          setCurrentUser(null);
+          setCurrentUserId(null);
+          await AsyncStorage.removeItem(USER_STORAGE_KEY);
         }
       } else {
+        // No Firebase user - clear everything
         setCurrentUser(null);
         setCurrentUserId(null);
         await AsyncStorage.removeItem(USER_STORAGE_KEY);

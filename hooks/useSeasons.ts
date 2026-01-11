@@ -1,47 +1,21 @@
-import { useState, useEffect } from 'react';
-import { Season } from '../firebase/types';
-import { getActiveSeason, getAllSeasons } from '../firebase/services';
+import { useData } from '../contexts/DataContext';
 
-// Hook to get active season
+// Hook to get active season (uses shared DataContext)
 export const useActiveSeason = () => {
-  const [season, setSeason] = useState<Season | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<Error | null>(null);
-
-  useEffect(() => {
-    const fetchSeason = async () => {
-      try {
-        setLoading(true);
-        const seasonData = await getActiveSeason();
-        setSeason(seasonData);
-        setError(null);
-      } catch (err) {
-        setError(err as Error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchSeason();
-  }, []);
-
-  const refetch = async () => {
-    try {
-      setLoading(true);
-      const seasonData = await getActiveSeason();
-      setSeason(seasonData);
-      setError(null);
-    } catch (err) {
-      setError(err as Error);
-    } finally {
-      setLoading(false);
-    }
+  const { season, seasonLoading, seasonError, refetchSeason } = useData();
+  return { 
+    season, 
+    loading: seasonLoading, 
+    error: seasonError, 
+    refetch: refetchSeason 
   };
-
-  return { season, loading, error, refetch };
 };
 
-// Hook to get all seasons
+import { useState, useEffect } from 'react';
+import { Season } from '../firebase/types';
+import { getAllSeasons } from '../firebase/services';
+
+// Hook to get all seasons (kept separate as it's not commonly used)
 export const useAllSeasons = () => {
   const [seasons, setSeasons] = useState<Season[]>([]);
   const [loading, setLoading] = useState(true);

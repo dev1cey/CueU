@@ -2,6 +2,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useAllNews } from '../../hooks/useNews';
+import { useData } from '../../contexts/DataContext';
 import { News } from '../../firebase/types';
 import { useState } from 'react';
 
@@ -18,6 +19,7 @@ const formatDate = (timestamp: any): string => {
 
 export default function NewsTab() {
   const { news, loading, error, refetch } = useAllNews();
+  const { refreshAll } = useData();
   const [refreshing, setRefreshing] = useState(false);
   const router = useRouter();
 
@@ -28,7 +30,8 @@ export default function NewsTab() {
   const onRefresh = async () => {
     setRefreshing(true);
     try {
-      await refetch();
+      // Use shared refreshAll which refreshes all data
+      await refreshAll();
     } finally {
       setRefreshing(false);
     }

@@ -14,7 +14,7 @@ WebBrowser.maybeCompleteAuthSession();
 export default function AuthScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
-  const { signInWithGoogle, checkUserExists, login } = useAuth();
+  const { signInWithGoogle, checkUserExists, login, currentUser, loading } = useAuth();
 
   // Set up Google OAuth for mobile using expo-auth-session
   // Use the iOS Client ID with the native redirect URI format
@@ -26,6 +26,13 @@ export default function AuthScreen() {
     iosClientId: GOOGLE_OAUTH_IOS_CLIENT_ID,
     redirectUri: redirectUri,
   });
+
+  // Redirect if user is already logged in
+  useEffect(() => {
+    if (!loading && currentUser) {
+      router.replace('/(tabs)');
+    }
+  }, [loading, currentUser, router]);
 
   // Handle OAuth response from expo-auth-session
   useEffect(() => {
@@ -127,6 +134,22 @@ export default function AuthScreen() {
       setIsLoading(false);
     }
   };
+
+  // Show loading state while checking auth
+  if (loading) {
+    return (
+      <LinearGradient
+        colors={['#7C3AED', '#6D28D9', '#5B21B6']}
+        style={styles.container}
+      >
+        <SafeAreaView style={styles.safeArea}>
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="white" />
+          </View>
+        </SafeAreaView>
+      </LinearGradient>
+    );
+  }
 
   return (
     <LinearGradient
@@ -363,5 +386,10 @@ const styles = StyleSheet.create({
     color: 'rgba(255, 255, 255, 0.6)',
     marginTop: 12,
     fontStyle: 'italic',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });
