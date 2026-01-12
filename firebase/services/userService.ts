@@ -5,11 +5,13 @@ import {
   getDocs,
   setDoc,
   updateDoc,
+  deleteDoc,
   query,
   where,
   orderBy,
   limit,
   Timestamp,
+  writeBatch,
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../config';
@@ -45,11 +47,13 @@ export const createUser = async (
       'expert': 7,
     };
     
+    // Build user object, only including defined fields (Firestore doesn't allow undefined)
     const newUser: Omit<User, 'id'> = {
-      ...userData,
-      phone: userData.phone ? Number(userData.phone) : undefined,
-      bio: userData.bio || '',
+      email: userData.email,
+      name: userData.name,
+      skillLevel: userData.skillLevel,
       skillLevelNum: skillLevelMap[userData.skillLevel],
+      bio: userData.bio || '',
       wins: 0,
       losses: 0,
       matchesPlayed: 0,
@@ -57,6 +61,23 @@ export const createUser = async (
       seasonPoints: {}, // Initialize season points
       createdAt: now,
     };
+    
+    // Only add optional fields if they have values (Firestore doesn't allow undefined)
+    if (userData.phone) {
+      newUser.phone = Number(userData.phone);
+    }
+    if (userData.wechat) {
+      newUser.wechat = userData.wechat;
+    }
+    if (userData.discord) {
+      newUser.discord = userData.discord;
+    }
+    if (userData.department) {
+      newUser.department = userData.department;
+    }
+    if (userData.profileImageUrl) {
+      newUser.profileImageUrl = userData.profileImageUrl;
+    }
 
     await setDoc(userRef, newUser);
   } catch (error) {
@@ -95,6 +116,148 @@ export const getUserByEmail = async (email: string): Promise<User | null> => {
     return null;
   } catch (error) {
     console.error('Error getting user by email:', error);
+    throw error;
+  }
+};
+
+// Migrate user document from old ID to new UID-based ID
+export const migrateUserToUid = async (oldUserId: string, newUserId: string): Promise<User | null> => {
+  try {
+    // Check if new document already exists
+    const newUserRef = doc(db, USERS_COLLECTION, newUserId);
+    const newUserSnap = await getDoc(newUserRef);
+    if (newUserSnap.exists()) {
+      // Document already exists with correct ID, return it
+      return { id: newUserSnap.id, ...newUserSnap.data() } as User;
+    }
+    
+    // Get the old user document
+    const oldUserRef = doc(db, USERS_COLLECTION, oldUserId);
+    const oldUserSnap = await getDoc(oldUserRef);
+    
+    if (!oldUserSnap.exists()) {
+      console.error(`Old user document ${oldUserId} does not exist`);
+      return null;
+    }
+    
+    const oldUserData = oldUserSnap.data();
+    
+    // Create new user document with UID as document ID
+    // Preserve all data from old document, ensuring required fields exist
+    const newUser: Omit<User, 'id'> = {
+      ...oldUserData,
+      // Ensure createdAt exists (required by Firestore rules)
+      createdAt: oldUserData.createdAt || Timestamp.now(),
+    } as Omit<User, 'id'>;
+    
+    await setDoc(newUserRef, newUser);
+    
+    // Now migrate all references to the old UID in other collections
+    await migrateUserReferences(oldUserId, newUserId);
+    
+    // Note: We don't delete the old document to preserve data integrity
+    // The old document can be cleaned up later if needed
+    
+    return { id: newUserId, ...newUser } as User;
+  } catch (error) {
+    console.error('Error migrating user:', error);
+    throw error;
+  }
+};
+
+// Migrate all references to oldUserId to newUserId in matches, reports, notifications, and seasons
+const migrateUserReferences = async (oldUserId: string, newUserId: string): Promise<void> => {
+  const batch = writeBatch(db);
+  let updateCount = 0;
+
+  try {
+    // 1. Migrate matches where user is player1 or player2
+    const matchesRef = collection(db, 'matches');
+    const matchesQuery = query(matchesRef, where('player1Id', '==', oldUserId));
+    const matchesQuery2 = query(matchesRef, where('player2Id', '==', oldUserId));
+    
+    const [matchesSnap1, matchesSnap2] = await Promise.all([
+      getDocs(matchesQuery),
+      getDocs(matchesQuery2)
+    ]);
+    
+    const allMatches = new Map<string, any>();
+    matchesSnap1.forEach(doc => {
+      allMatches.set(doc.id, { ...doc.data(), isPlayer1: true });
+    });
+    matchesSnap2.forEach(doc => {
+      const existing = allMatches.get(doc.id);
+      if (existing) {
+        existing.isPlayer2 = true;
+      } else {
+        allMatches.set(doc.id, { ...doc.data(), isPlayer2: true });
+      }
+    });
+    
+    for (const [matchId, matchData] of allMatches) {
+      const matchRef = doc(db, 'matches', matchId);
+      const updates: any = {};
+      if (matchData.isPlayer1 && matchData.player1Id === oldUserId) {
+        updates.player1Id = newUserId;
+      }
+      if (matchData.isPlayer2 && matchData.player2Id === oldUserId) {
+        updates.player2Id = newUserId;
+      }
+      if (matchData.winnerId === oldUserId) {
+        updates.winnerId = newUserId;
+      }
+      if (Object.keys(updates).length > 0) {
+        batch.update(matchRef, updates);
+        updateCount++;
+      }
+    }
+    
+    // 2. Migrate match reports
+    const reportsRef = collection(db, 'matchReports');
+    const reportsQuery = query(reportsRef, where('reportedBy', '==', oldUserId));
+    const reportsSnap = await getDocs(reportsQuery);
+    
+    reportsSnap.forEach(doc => {
+      const reportRef = doc(db, 'matchReports', doc.id);
+      batch.update(reportRef, { reportedBy: newUserId });
+      updateCount++;
+    });
+    
+    // 3. Migrate notifications
+    const notificationsRef = collection(db, 'notifications');
+    const notificationsQuery = query(notificationsRef, where('userId', '==', oldUserId));
+    const notificationsSnap = await getDocs(notificationsQuery);
+    
+    notificationsSnap.forEach(doc => {
+      const notificationRef = doc(db, 'notifications', doc.id);
+      batch.update(notificationRef, { userId: newUserId });
+      updateCount++;
+    });
+    
+    // 4. Migrate seasons (update playerIds array)
+    const seasonsRef = collection(db, 'seasons');
+    const seasonsSnap = await getDocs(seasonsRef);
+    
+    seasonsSnap.forEach(doc => {
+      const seasonData = doc.data();
+      if (seasonData.playerIds && Array.isArray(seasonData.playerIds)) {
+        const index = seasonData.playerIds.indexOf(oldUserId);
+        if (index !== -1) {
+          const newPlayerIds = [...seasonData.playerIds];
+          newPlayerIds[index] = newUserId;
+          const seasonRef = doc(db, 'seasons', doc.id);
+          batch.update(seasonRef, { playerIds: newPlayerIds });
+          updateCount++;
+        }
+      }
+    });
+    
+    // Commit all updates
+    if (updateCount > 0) {
+      await batch.commit();
+    }
+  } catch (error) {
+    console.error('Error migrating user references:', error);
     throw error;
   }
 };

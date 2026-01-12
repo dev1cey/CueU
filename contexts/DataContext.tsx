@@ -249,8 +249,15 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
 
   // Refresh all data
   const refreshAll = useCallback(async (userId?: string, silent: boolean = false) => {
-    // Don't fetch if not authenticated (rules require auth)
-    if (!auth.currentUser) {
+    // #region agent log
+    fetch('http://127.0.0.1:7244/ingest/1b6a20ab-a1d9-409f-8117-56c59c909504',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'DataContext.tsx:251',message:'refreshAll called',data:{hasCurrentUser:!!auth.currentUser,email:auth.currentUser?.email,isUwEmail:auth.currentUser?.email?.endsWith('@uw.edu'),userId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+    // #endregion
+    // CRITICAL: Don't fetch if not authenticated or if email is not valid @uw.edu
+    // This prevents fetching for invalid users during the sign-in race condition
+    if (!auth.currentUser || !auth.currentUser.email || !auth.currentUser.email.endsWith('@uw.edu')) {
+      // #region agent log
+      fetch('http://127.0.0.1:7244/ingest/1b6a20ab-a1d9-409f-8117-56c59c909504',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'DataContext.tsx:253',message:'refreshAll early return - invalid auth',data:{hasCurrentUser:!!auth.currentUser,email:auth.currentUser?.email},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+      // #endregion
       return;
     }
     
@@ -262,6 +269,9 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     
     isRefreshingRef.current = true;
     lastRefreshTimeRef.current = now;
+    // #region agent log
+    fetch('http://127.0.0.1:7244/ingest/1b6a20ab-a1d9-409f-8117-56c59c909504',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'DataContext.tsx:265',message:'refreshAll starting data fetch',data:{email:auth.currentUser?.email,isUwEmail:auth.currentUser?.email?.endsWith('@uw.edu')},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+    // #endregion
     try {
       await Promise.all([
         refetchSeason(silent),
@@ -322,13 +332,24 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         }
         // Only show loading if we don't have data yet (first mount)
         const isFirstMount = !season && events.length === 0 && news.length === 0;
-        // Only fetch if authenticated (rules require auth)
-        if (auth.currentUser) {
+        // Only fetch if authenticated with valid @uw.edu email (rules require auth)
+        // #region agent log
+        fetch('http://127.0.0.1:7244/ingest/1b6a20ab-a1d9-409f-8117-56c59c909504',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'DataContext.tsx:326',message:'Initial fetch check',data:{hasCurrentUser:!!auth.currentUser,email:auth.currentUser?.email,isUwEmail:auth.currentUser?.email?.endsWith('@uw.edu')},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+        // #endregion
+        // CRITICAL: Check both auth.currentUser and email validity to prevent fetching for invalid users
+        if (auth.currentUser && auth.currentUser.email && auth.currentUser.email.endsWith('@uw.edu')) {
+          // #region agent log
+          fetch('http://127.0.0.1:7244/ingest/1b6a20ab-a1d9-409f-8117-56c59c909504',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'DataContext.tsx:327',message:'Starting initial fetch',data:{email:auth.currentUser.email,isUwEmail:auth.currentUser.email?.endsWith('@uw.edu')},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+          // #endregion
           await Promise.all([
             refetchSeasonRef.current(!isFirstMount), // Silent if we already have data
             refetchEventsRef.current(!isFirstMount),
             refetchNewsRef.current(!isFirstMount),
           ]);
+        } else if (auth.currentUser && !auth.currentUser.email?.endsWith('@uw.edu')) {
+          // #region agent log
+          fetch('http://127.0.0.1:7244/ingest/1b6a20ab-a1d9-409f-8117-56c59c909504',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'DataContext.tsx:333',message:'Skipping initial fetch - invalid email',data:{email:auth.currentUser.email},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+          // #endregion
         }
         initialFetchDoneRef.current = true;
       };
@@ -337,8 +358,8 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
 
     // Set up interval
     refreshIntervalRef.current = setInterval(() => {
-      // Only refresh if app is in foreground and user is authenticated
-      if (appStateRef.current === 'active' && !isRefreshingRef.current && auth.currentUser) {
+      // Only refresh if app is in foreground and user is authenticated with valid @uw.edu email
+      if (appStateRef.current === 'active' && !isRefreshingRef.current && auth.currentUser && auth.currentUser.email && auth.currentUser.email.endsWith('@uw.edu')) {
         refreshAllRef.current(matchesUserIdRef.current, true); // Silent refresh for auto-refresh
       }
     }, AUTO_REFRESH_INTERVAL);
@@ -359,7 +380,9 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         nextAppState === 'active' &&
         autoRefreshEnabled &&
         !isRefreshingRef.current &&
-        auth.currentUser // Only refresh if authenticated
+        auth.currentUser && // Only refresh if authenticated
+        auth.currentUser.email && // And has valid email
+        auth.currentUser.email.endsWith('@uw.edu') // And email is @uw.edu
       ) {
         // App has come to the foreground, refresh data silently
         refreshAllRef.current(matchesUserIdRef.current, true); // Silent refresh when app comes to foreground
@@ -375,9 +398,21 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   // Listen to auth state changes and refetch when user authenticates
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
-      if (user && initialFetchDoneRef.current) {
+      // #region agent log
+      fetch('http://127.0.0.1:7244/ingest/1b6a20ab-a1d9-409f-8117-56c59c909504',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'DataContext.tsx:377',message:'onAuthStateChanged fired in DataContext',data:{hasUser:!!user,email:user?.email,uid:user?.uid,initialFetchDone:initialFetchDoneRef.current,isUwEmail:user?.email?.endsWith('@uw.edu')},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+      // #endregion
+      // CRITICAL: Only fetch data if user has valid @uw.edu email
+      // This prevents fetching for invalid users during the sign-in race condition
+      if (user && initialFetchDoneRef.current && user.email && user.email.endsWith('@uw.edu')) {
+        // #region agent log
+        fetch('http://127.0.0.1:7244/ingest/1b6a20ab-a1d9-409f-8117-56c59c909504',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'DataContext.tsx:378',message:'About to call refreshAll',data:{email:user.email,isUwEmail:user.email?.endsWith('@uw.edu')},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+        // #endregion
         // User just authenticated, refetch data
         refreshAllRef.current(matchesUserIdRef.current, true);
+      } else if (user && !user.email?.endsWith('@uw.edu')) {
+        // #region agent log
+        fetch('http://127.0.0.1:7244/ingest/1b6a20ab-a1d9-409f-8117-56c59c909504',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'DataContext.tsx:382',message:'Skipping refreshAll - invalid email',data:{email:user.email},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+        // #endregion
       }
     });
     return unsubscribe;
